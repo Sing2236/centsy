@@ -2248,8 +2248,8 @@ function App() {
             <p className="eyebrow">Simple. Detailed. Yours.</p>
             <h1>Finish a full budget in minutes, not hours.</h1>
             <p className="lead">
-              Answer a few questions, get a complete budget, then edit as you go.
-              See how each bill changes your weekly cash.
+              Answer a few questions, get a complete AI-guided budget, then edit
+              as you go. See how each bill changes your weekly cash.
             </p>
             <div className="hero-cta">
               <button
