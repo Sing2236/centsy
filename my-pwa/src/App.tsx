@@ -11,6 +11,31 @@ type Stock = {
   monthly: number
 }
 
+type ForumPost = {
+  id: string
+  user_id: string
+  title: string
+  body: string
+  tags: string[]
+  created_at: string
+  updated_at: string
+}
+
+type ForumComment = {
+  id: string
+  post_id: string
+  user_id: string
+  body: string
+  created_at: string
+}
+
+type BudgetBill = {
+  name: string
+  date: string
+  amount: number
+  recurringDay: number | null
+}
+
 type BudgetState = {
   incomePerPaycheck: number
   partnerIncome: number
@@ -27,7 +52,7 @@ type BudgetState = {
   budgetGenerated: boolean
   budgetCategories: typeof categoriesSeed
   budgetGoals: typeof goalsSeed
-  budgetBills: typeof billsSeed
+  budgetBills: BudgetBill[]
   labels: string[]
   scheduleBias: number
   debtStrategy: string
@@ -52,7 +77,7 @@ const goalsSeed = [
   { name: 'Debt payoff', amount: 6480, target: 9200 },
 ]
 
-const billsSeed = [
+const billsSeed: BudgetBill[] = [
   { name: 'Rent', date: 'Mar 1', amount: 1200, recurringDay: null },
   { name: 'Phone', date: 'Mar 5', amount: 80, recurringDay: null },
   { name: 'Car insurance', date: 'Mar 12', amount: 165, recurringDay: null },
@@ -144,6 +169,13 @@ const extractDayFromLabel = (dateLabel: string) => {
 const formatBillDateLabel = (bill: { date: string; recurringDay?: number | null }) =>
   bill.recurringDay ? `Monthly on ${bill.recurringDay}` : bill.date
 
+const formatShortDate = (value: string) => {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 
 function App() {
   const [budgetGenerated, setBudgetGenerated] = useState(false)
@@ -151,7 +183,7 @@ function App() {
   const toastTimer = useRef<number | null>(null)
   const [budgetCategories, setBudgetCategories] = useState(categoriesSeed)
   const [budgetGoals, setBudgetGoals] = useState(goalsSeed)
-  const [budgetBills, setBudgetBills] = useState(billsSeed)
+  const [budgetBills, setBudgetBills] = useState<BudgetBill[]>(billsSeed)
   const [showCategoryForm, setShowCategoryForm] = useState(false)
   const [showGoalForm, setShowGoalForm] = useState(false)
   const [newCategory, setNewCategory] = useState({
@@ -231,11 +263,41 @@ function App() {
   } | null>(null)
   const [pendingSummary, setPendingSummary] = useState('')
   const [carouselIndex, setCarouselIndex] = useState(0)
+  const [forumPosts, setForumPosts] = useState<ForumPost[]>([])
+  const [forumComments, setForumComments] = useState<
+    Record<string, ForumComment[]>
+  >({})
+  const [forumLoading, setForumLoading] = useState(false)
+  const [forumError, setForumError] = useState('')
+  const [activeForumPostId, setActiveForumPostId] = useState<string | null>(null)
+  const [newPost, setNewPost] = useState({
+    title: '',
+    body: '',
+    tags: '',
+  })
+  const [newComment, setNewComment] = useState<Record<string, string>>({})
   const [activeView, setActiveView] = useState<
-    'workspace' | 'cashflow' | 'planner' | 'invest' | 'copilot' | 'personalize'
+    | 'workspace'
+    | 'cashflow'
+    | 'planner'
+    | 'invest'
+    | 'copilot'
+    | 'personalize'
   >('workspace')
   const [categoryRange, setCategoryRange] = useState({ min: 0, max: 3000 })
   const currentYear = new Date().getFullYear()
+
+  const basePath =
+    typeof window !== 'undefined' && window.location.pathname.startsWith('/centsy')
+      ? '/centsy'
+      : ''
+  const viewParam =
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('view')
+      : null
+  const isCommunityPage = viewParam === 'community'
+  const communityUrl = `${basePath}/?view=community`
+  const homeUrl = `${basePath}/`
 
   const builderRef = useRef<HTMLDivElement | null>(null)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
@@ -259,6 +321,12 @@ function App() {
       listener.subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    if (isCommunityPage) {
+      loadForumPosts()
+    }
+  }, [isCommunityPage, userId])
 
   const currentBudgetState = useMemo<BudgetState>(
     () => ({
@@ -643,6 +711,145 @@ function App() {
   const handleRemoveLabel = (label: string) => {
     setLabels((prev) => prev.filter((item) => item !== label))
     showToast('Label removed.')
+  }
+
+  const parseTags = (value: string) =>
+    value
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+
+  const loadForumPosts = async () => {
+    setForumLoading(true)
+    setForumError('')
+    const { data, error } = await supabase
+      .from('forum_posts')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) {
+      setForumError('Could not load community posts.')
+    } else {
+      const formatted = (data ?? []).map((item) => ({
+        ...item,
+        tags: Array.isArray(item.tags) ? item.tags : [],
+      }))
+      setForumPosts(formatted as ForumPost[])
+    }
+    setForumLoading(false)
+  }
+
+  const loadForumComments = async (postId: string) => {
+    const { data, error } = await supabase
+      .from('forum_comments')
+      .select('*')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true })
+    if (error) {
+      showToast('Could not load replies.')
+      return
+    }
+    setForumComments((prev) => ({ ...prev, [postId]: (data ?? []) as ForumComment[] }))
+  }
+
+  const handleCreatePost = async () => {
+    if (!requireLogin('Please log in to post.')) {
+      return
+    }
+    const title = newPost.title.trim()
+    const body = newPost.body.trim()
+    if (!title || !body) {
+      showToast('Title and question are required.')
+      return
+    }
+    if (!userId) {
+      showToast('Please log in to post.')
+      return
+    }
+    const tags = parseTags(newPost.tags)
+    const { data, error } = await supabase
+      .from('forum_posts')
+      .insert({
+        user_id: userId,
+        title,
+        body,
+        tags,
+        updated_at: new Date().toISOString(),
+      })
+      .select('*')
+      .single()
+    if (error) {
+      showToast('Could not publish your post.')
+      return
+    }
+    setForumPosts((prev) => [data as ForumPost, ...prev])
+    setNewPost({ title: '', body: '', tags: '' })
+    showToast('Post published.')
+  }
+
+  const handleDeletePost = async (postId: string) => {
+    const { error } = await supabase.from('forum_posts').delete().eq('id', postId)
+    if (error) {
+      showToast('Could not delete the post.')
+      return
+    }
+    setForumPosts((prev) => prev.filter((post) => post.id !== postId))
+    setActiveForumPostId((prev) => (prev === postId ? null : prev))
+    setForumComments((prev) => {
+      const next = { ...prev }
+      delete next[postId]
+      return next
+    })
+    showToast('Post removed.')
+  }
+
+  const handleCreateComment = async (postId: string) => {
+    if (!requireLogin('Please log in to reply.')) {
+      return
+    }
+    const body = newComment[postId]?.trim()
+    if (!body) {
+      showToast('Reply cannot be empty.')
+      return
+    }
+    if (!userId) {
+      showToast('Please log in to reply.')
+      return
+    }
+    const { data, error } = await supabase
+      .from('forum_comments')
+      .insert({
+        post_id: postId,
+        user_id: userId,
+        body,
+      })
+      .select('*')
+      .single()
+    if (error) {
+      showToast('Could not publish your reply.')
+      return
+    }
+    setForumComments((prev) => ({
+      ...prev,
+      [postId]: [...(prev[postId] ?? []), data as ForumComment],
+    }))
+    setNewComment((prev) => ({ ...prev, [postId]: '' }))
+    showToast('Reply posted.')
+  }
+
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    const { error } = await supabase
+      .from('forum_comments')
+      .delete()
+      .eq('id', commentId)
+    if (error) {
+      showToast('Could not delete the reply.')
+      return
+    }
+    setForumComments((prev) => ({
+      ...prev,
+      [postId]: (prev[postId] ?? []).filter((comment) => comment.id !== commentId),
+    }))
+    showToast('Reply removed.')
   }
 
   const applyBudgetUpdates = (updates: Partial<BudgetState>) => {
@@ -1526,6 +1733,302 @@ function App() {
     </div>
   )
 
+  if (isCommunityPage) {
+    return (
+      <div className="forum-page">
+        <header className="forum-header">
+          <div className="brand">
+            <span className="brand-mark">
+              <img className="brand-logo" src={centsyLogo} alt="Centsy logo" />
+            </span>
+            <div>
+              <p className="brand-name">Centsy Community</p>
+              <p className="brand-tag">Real budgets, real people</p>
+            </div>
+          </div>
+          <div className="forum-actions">
+            <button className="ghost" onClick={() => window.location.assign(homeUrl)}>
+              Back to budget
+            </button>
+            {userEmail ? (
+              <span className="tag">Signed in</span>
+            ) : (
+              <button className="solid" onClick={() => setShowLogin(true)}>
+                Log in
+              </button>
+            )}
+          </div>
+        </header>
+        <main className="forum-main">
+          <aside className="forum-rail">
+            <div className="rail-card">
+              <h3>Categories</h3>
+              <ul>
+                <li>Bills & essentials</li>
+                <li>Debt payoff</li>
+                <li>Saving wins</li>
+                <li>Side income</li>
+                <li>Family budgeting</li>
+              </ul>
+            </div>
+            <div className="rail-card">
+              <h3>Guidelines</h3>
+              <p className="muted">
+                Be kind, stay on topic, and share what has worked for you.
+              </p>
+            </div>
+          </aside>
+          <section className="forum-feed">
+            <div className="forum-hero">
+              <div>
+                <h1>Ask the community</h1>
+                <p>
+                  Post your question, get real answers, and share your own
+                  budgeting wins.
+                </p>
+              </div>
+              <button className="ghost" onClick={loadForumPosts}>
+                Refresh
+              </button>
+            </div>
+            <div className="forum-compose">
+              <h3>Start a thread</h3>
+              <div className="community-form">
+                <label>
+                  Title
+                  <input
+                    type="text"
+                    value={newPost.title}
+                    placeholder="Ex: How do you plan for irregular bills?"
+                    onChange={(event) =>
+                      setNewPost((prev) => ({ ...prev, title: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  Question
+                  <textarea
+                    rows={4}
+                    value={newPost.body}
+                    placeholder="Share the situation and what you are trying to solve."
+                    onChange={(event) =>
+                      setNewPost((prev) => ({ ...prev, body: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  Tags
+                  <input
+                    type="text"
+                    value={newPost.tags}
+                    placeholder="bills, debt, savings"
+                    onChange={(event) =>
+                      setNewPost((prev) => ({ ...prev, tags: event.target.value }))
+                    }
+                  />
+                </label>
+                <button className="solid small" onClick={handleCreatePost}>
+                  Post question
+                </button>
+              </div>
+            </div>
+            <div className="forum-list">
+              {forumLoading ? (
+                <p className="muted">Loading community posts...</p>
+              ) : forumError ? (
+                <p className="muted">{forumError}</p>
+              ) : forumPosts.length ? (
+                forumPosts.map((post) => {
+                  const isOpen = activeForumPostId === post.id
+                  const comments = forumComments[post.id] ?? []
+                  return (
+                    <article className="forum-thread" key={post.id}>
+                      <div className="thread-main">
+                        <div>
+                          <h4>{post.title}</h4>
+                          <p className="muted">{post.body}</p>
+                        </div>
+                        <div className="thread-meta">
+                          <span>{formatShortDate(post.created_at)}</span>
+                          <span>{comments.length} replies</span>
+                          {post.user_id === userId ? (
+                            <button
+                              className="ghost small"
+                              onClick={() => handleDeletePost(post.id)}
+                            >
+                              Delete
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      {post.tags.length ? (
+                        <div className="tag-row">
+                          {post.tags.map((tag) => (
+                            <span className="tag-pill" key={`${post.id}-${tag}`}>
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      <button
+                        className="ghost small"
+                        onClick={() => {
+                          const nextId = isOpen ? null : post.id
+                          setActiveForumPostId(nextId)
+                          if (nextId && !forumComments[post.id]) {
+                            loadForumComments(post.id)
+                          }
+                        }}
+                      >
+                        {isOpen ? 'Hide replies' : 'View thread'}
+                      </button>
+                      {isOpen ? (
+                        <div className="forum-replies">
+                          {comments.length ? (
+                            comments.map((comment) => (
+                              <div className="forum-reply" key={comment.id}>
+                                <p>{comment.body}</p>
+                                <div className="reply-meta">
+                                  <span>{formatShortDate(comment.created_at)}</span>
+                                  {comment.user_id === userId ? (
+                                    <button
+                                      className="ghost small"
+                                      onClick={() =>
+                                        handleDeleteComment(post.id, comment.id)
+                                      }
+                                    >
+                                      Delete
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="muted">No replies yet.</p>
+                          )}
+                          <div className="reply-form">
+                            <textarea
+                              rows={3}
+                              value={newComment[post.id] ?? ''}
+                              placeholder="Share a tip or ask a follow-up."
+                              onChange={(event) =>
+                                setNewComment((prev) => ({
+                                  ...prev,
+                                  [post.id]: event.target.value,
+                                }))
+                              }
+                            />
+                            <button
+                              className="solid small"
+                              onClick={() => handleCreateComment(post.id)}
+                            >
+                              Reply
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </article>
+                  )
+                })
+              ) : (
+                <p className="muted">No posts yet. Start the first thread.</p>
+              )}
+            </div>
+          </section>
+          <aside className="forum-rail">
+            <div className="rail-card">
+              <h3>Popular tags</h3>
+              <div className="tag-row">
+                <span className="tag-pill">groceries</span>
+                <span className="tag-pill">rent</span>
+                <span className="tag-pill">debt</span>
+                <span className="tag-pill">emergency</span>
+              </div>
+            </div>
+            <div className="rail-card">
+              <h3>Community tip</h3>
+              <p className="muted">
+                Share what you tried, what failed, and what finally clicked.
+              </p>
+            </div>
+          </aside>
+        </main>
+
+        {showLogin ? (
+          <div
+            className="modal-backdrop"
+            role="presentation"
+            onClick={() => setShowLogin(false)}
+          >
+            <div
+              className="modal"
+              role="dialog"
+              aria-modal="true"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="card-head">
+                <h3>{authMode === 'signup' ? 'Create account' : 'Log in'}</h3>
+                <button
+                  className="ghost small"
+                  onClick={() => setShowLogin(false)}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="auth-toggle">
+                <button
+                  className={authMode === 'login' ? 'solid small' : 'ghost small'}
+                  onClick={() => setAuthMode('login')}
+                  type="button"
+                >
+                  Log in
+                </button>
+                <button
+                  className={authMode === 'signup' ? 'solid small' : 'ghost small'}
+                  onClick={() => setAuthMode('signup')}
+                  type="button"
+                >
+                  Create account
+                </button>
+              </div>
+              <div className="modal-form">
+                <label>
+                  Email
+                  <input
+                    type="email"
+                    placeholder="you@email.com"
+                    value={loginEmail}
+                    onChange={(event) => setLoginEmail(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                  />
+                </label>
+              </div>
+              <button
+                className="solid"
+                onClick={handleAuthSubmit}
+                disabled={authLoading}
+              >
+                {authLoading
+                  ? 'Working...'
+                  : authMode === 'signup'
+                  ? 'Create account'
+                  : 'Log in'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
   return (
     <div className="app">
       <header className="hero">
@@ -1775,6 +2278,9 @@ function App() {
               onClick={() => setActiveView('copilot')}
             >
               Copilot
+            </button>
+            <button className="tab" onClick={() => window.location.assign(communityUrl)}>
+              Community
             </button>
             <button
               className={activeView === 'personalize' ? 'tab active' : 'tab'}
