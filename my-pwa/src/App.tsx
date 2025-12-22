@@ -58,11 +58,6 @@ const billsSeed = [
   { name: 'Streaming bundle', date: 'Mar 19', amount: 24 },
 ]
 
-const sampleStocks: Stock[] = [
-  { symbol: 'VOO', shares: 2, price: 430, monthly: 120 },
-  { symbol: 'AAPL', shares: 4, price: 190, monthly: 60 },
-]
-
 const formatCurrency = (value: number) => {
   const rounded = Math.round(value)
   if (rounded < 0) {
@@ -125,8 +120,6 @@ const formatDateForInput = (dateLabel: string) => {
   return ''
 }
 
-const weekLabel = (week: number) => `Week ${week}`
-
 function App() {
   const [budgetGenerated, setBudgetGenerated] = useState(false)
   const [toast, setToast] = useState('')
@@ -147,7 +140,6 @@ function App() {
   })
   const [robinhoodConnected, setRobinhoodConnected] = useState(false)
   const [stocks, setStocks] = useState<Stock[]>([])
-  const [showStockForm, setShowStockForm] = useState(false)
   const [newStock, setNewStock] = useState({
     symbol: '',
     shares: '',
@@ -180,7 +172,6 @@ function App() {
     target: '',
   })
   const [showLogin, setShowLogin] = useState(false)
-  const [investmentSaved, setInvestmentSaved] = useState(false)
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
@@ -214,7 +205,6 @@ function App() {
   const builderRef = useRef<HTMLDivElement | null>(null)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const plannerRef = useRef<HTMLDivElement | null>(null)
-  const investRef = useRef<HTMLDivElement | null>(null)
   const saveTimer = useRef<number | null>(null)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [isHydrating, setIsHydrating] = useState(false)
@@ -451,22 +441,6 @@ function App() {
       showToast('Goal added. Update the target any time.')
   }
 
-  const handleGoalChange = (
-    name: string,
-    field: 'name' | 'amount' | 'target',
-    value: string
-  ) => {
-    setBudgetGoals((prev) =>
-      prev.map((goal) => {
-        if (goal.name !== name) return goal
-        if (field === 'amount' || field === 'target') {
-          return { ...goal, [field]: Number(value || 0) }
-        }
-        return { ...goal, [field]: value }
-      })
-    )
-  }
-
   const handleDeleteGoal = (name: string) => {
     setBudgetGoals((prev) => prev.filter((goal) => goal.name !== name))
     if (editingGoal === name) {
@@ -475,40 +449,6 @@ function App() {
     showToast(`${name} removed.`)
   }
 
-
-  const handleConnectRobinhood = () => {
-    if (robinhoodConnected) {
-      setRobinhoodConnected(false)
-      setStocks([])
-      setInvestmentSaved(false)
-      showToast('Robinhood disconnected.')
-      return
-    }
-    setRobinhoodConnected(true)
-    setStocks(sampleStocks)
-    setInvestmentSaved(false)
-    showToast('Robinhood connected (demo holdings loaded).')
-  }
-
-  const handleAddStock = () => {
-    if (!newStock.symbol.trim()) {
-      showToast('Add a stock symbol first.')
-      return
-    }
-    setStocks((prev) => [
-      ...prev,
-      {
-        symbol: newStock.symbol.toUpperCase(),
-        shares: Number(newStock.shares || 0),
-        price: Number(newStock.price || 0),
-        monthly: Number(newStock.monthly || 0),
-      },
-    ])
-    setNewStock({ symbol: '', shares: '', price: '', monthly: '' })
-    setShowStockForm(false)
-    setInvestmentSaved(false)
-    showToast('Stock added to your portfolio.')
-  }
 
   const handleGenerateBudget = () => {
     if (!requireLogin('Please log in to generate your budget.')) {
@@ -611,11 +551,6 @@ function App() {
         index === billIndex ? { ...bill, date, amount } : bill
       )
     })
-  }
-
-  const getBillSliderValue = (index: number, fallback: number) => {
-    const current = billSliderValues[index]
-    return typeof current === 'number' ? current : fallback
   }
 
   const handleAddLabel = () => {
@@ -1213,7 +1148,6 @@ function App() {
       </button>
     </div>,
   ]
-  const carouselMaxIndex = Math.max(carouselCards.length - 1, 0)
   const handleCarouselPrev = () => {
     setCarouselIndex((prev) =>
       carouselCards.length ? (prev - 1 + carouselCards.length) % carouselCards.length : 0
