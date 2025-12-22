@@ -77,6 +77,17 @@ const goalPace = (amount: number, target: number) => {
 }
 
 const billWeekIndex = (dateLabel: string) => {
+  const isoMatch = dateLabel.match(/^\d{4}-\d{2}-\d{2}$/)
+  if (isoMatch) {
+    const parsed = new Date(dateLabel)
+    const day = parsed.getDate()
+    if (!Number.isNaN(day)) {
+      if (day <= 7) return 1
+      if (day <= 14) return 2
+      if (day <= 21) return 3
+      return 4
+    }
+  }
   const weekMatch = dateLabel.match(/week\s*(\d+)/i)
   if (weekMatch) {
     const week = Math.min(4, Math.max(1, Number(weekMatch[1])))
@@ -91,6 +102,13 @@ const billWeekIndex = (dateLabel: string) => {
     return 4
   }
   return 1
+}
+
+const formatDateForInput = (dateLabel: string) => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateLabel)) {
+    return dateLabel
+  }
+  return ''
 }
 
 const weekLabel = (week: number) => `Week ${week}`
@@ -159,6 +177,7 @@ function App() {
     null
   )
   const [pendingSummary, setPendingSummary] = useState('')
+  const [carouselIndex, setCarouselIndex] = useState(0)
   const [activeView, setActiveView] = useState<
     'workspace' | 'cashflow' | 'planner' | 'invest' | 'copilot' | 'personalize'
   >('workspace')
@@ -252,7 +271,7 @@ function App() {
 
   const handleAddCategory = () => {
     if (!newCategory.name.trim()) {
-      showToast('Add a category name first.')
+      showToast('Add a bill name first.')
       return
     }
     if (
@@ -261,7 +280,7 @@ function App() {
           category.name.toLowerCase() === newCategory.name.trim().toLowerCase()
       )
     ) {
-      showToast('That category already exists.')
+      showToast('That bill already exists.')
       return
     }
     setBudgetCategories((prev) => [
@@ -274,7 +293,7 @@ function App() {
     ])
     setNewCategory({ name: '', planned: '', actual: '' })
     setShowCategoryForm(false)
-    showToast('Category added to your budget.')
+    showToast('Bill added to your budget.')
   }
 
   const handleQuickAdd = (name: string) => {
@@ -282,7 +301,7 @@ function App() {
       (category) => category.name.toLowerCase() === name.toLowerCase()
     )
     if (exists) {
-      showToast('That category already exists.')
+      showToast('That bill already exists.')
       return
     }
     setBudgetCategories((prev) => [
@@ -327,6 +346,15 @@ function App() {
     showToast(`${name} updated.`)
   }
 
+  const handleDeleteCategory = (name: string) => {
+    setBudgetCategories((prev) => prev.filter((category) => category.name !== name))
+    setBudgetBills((prev) =>
+      prev.filter((bill) => bill.name.toLowerCase() !== name.toLowerCase())
+    )
+    setEditingCategory(null)
+    showToast(`${name} removed from monthly bills and schedule.`)
+  }
+
   const updateCategoryValue = (
     name: string,
     field: 'planned' | 'actual',
@@ -354,8 +382,30 @@ function App() {
     ])
     setNewGoal({ name: '', target: '' })
     setShowGoalForm(false)
-    showToast('Goal added. Update the target any time.')
+      showToast('Goal added. Update the target any time.')
   }
+
+  const handleGoalChange = (
+    name: string,
+    field: 'name' | 'amount' | 'target',
+    value: string
+  ) => {
+    setBudgetGoals((prev) =>
+      prev.map((goal) => {
+        if (goal.name !== name) return goal
+        if (field === 'amount' || field === 'target') {
+          return { ...goal, [field]: Number(value || 0) }
+        }
+        return { ...goal, [field]: value }
+      })
+    )
+  }
+
+  const handleDeleteGoal = (name: string) => {
+    setBudgetGoals((prev) => prev.filter((goal) => goal.name !== name))
+    showToast(`${name} removed.`)
+  }
+
 
   const handleConnectRobinhood = () => {
     if (robinhoodConnected) {
@@ -473,6 +523,25 @@ function App() {
         return { ...bill, [field]: value }
       })
     )
+  }
+
+  const handleDeleteBill = (index: number) => {
+    setBudgetBills((prev) => prev.filter((_bill, billIndex) => billIndex !== index))
+    showToast('Bill removed.')
+  }
+
+  const handleScheduleBill = (name: string, date: string, amount: number) => {
+    setBudgetBills((prev) => {
+      const billIndex = prev.findIndex(
+        (bill) => bill.name.toLowerCase() === name.toLowerCase()
+      )
+      if (billIndex < 0) {
+        return [...prev, { name, date, amount }]
+      }
+      return prev.map((bill, index) =>
+        index === billIndex ? { ...bill, date, amount } : bill
+      )
+    })
   }
 
   const getBillSliderValue = (index: number, fallback: number) => {
@@ -665,13 +734,13 @@ function App() {
     rows.push(['Summary'])
     rows.push(['Metric', 'Value'])
     rows.push(['Monthly income', formatCurrency(monthlyIncome)])
-    rows.push(['Planned bills', formatCurrency(plannedBillsTotal)])
+    rows.push(['Planned monthly bills', formatCurrency(plannedBillsDisplayTotal)])
     rows.push(['Savings + debt', formatCurrency(savingsDebtTotal)])
     rows.push(['Left to budget', formatCurrency(leftToBudget)])
     rows.push([])
 
-    rows.push(['Categories'])
-    rows.push(['Category', 'Planned', 'Actual', 'Status'])
+    rows.push(['Monthly bills'])
+    rows.push(['Bill', 'Planned', 'Actual', 'Status'])
     budgetCategories.forEach((category) => {
       rows.push([
         category.name,
@@ -682,9 +751,9 @@ function App() {
     })
     rows.push([])
 
-    rows.push(['Bills'])
+    rows.push(['Schedule'])
     rows.push(['Bill', 'Due date', 'Amount'])
-    budgetBills.forEach((bill) => {
+    scheduledBills.forEach((bill) => {
       rows.push([bill.name, bill.date, formatCurrency(bill.amount)])
     })
     rows.push([])
@@ -720,7 +789,7 @@ function App() {
     rows.push(['Preferences'])
     rows.push(['Pay frequency', payFrequencyLabel])
     rows.push(['Primary goal', primaryGoal])
-    rows.push(['Auto-suggest categories', autoSuggest ? 'Yes' : 'No'])
+    rows.push(['Auto-suggest bills', autoSuggest ? 'Yes' : 'No'])
     rows.push(['Include partner income', includePartner ? 'Yes' : 'No'])
     rows.push(['Debt strategy', debtStrategy])
     rows.push(['Labels', labels.join(' | ')])
@@ -829,6 +898,20 @@ function App() {
     }
     return sum + category.planned
   }, 0)
+  const monthlyBillsTotal = budgetCategories.reduce(
+    (sum, category) => sum + category.planned,
+    0
+  )
+  const plannedBillsDisplayTotal = monthlyBillsTotal
+  const plannedBillsDisplayCount = budgetCategories.length
+  const scheduledBills =
+    budgetBills.length > 0
+      ? budgetBills
+      : budgetCategories.map((category) => ({
+          name: category.name,
+          date: 'Unscheduled',
+          amount: category.planned,
+        }))
   const savingsDebtTotal = budgetCategories.reduce((sum, category) => {
     if (/savings|debt/i.test(category.name)) {
       return sum + category.planned
@@ -877,11 +960,11 @@ function App() {
   const minWeeklyAmount = Math.min(...weeklyAmounts)
   const bestWeekIndex = weeklyAmounts.indexOf(maxWeeklyAmount) + 1
   const tightWeekIndex = weeklyAmounts.indexOf(minWeeklyAmount) + 1
-  const upcomingBills = budgetBills.slice(0, 4)
+  const upcomingBills = scheduledBills.slice(0, 4)
   const suggestedBillIndex = budgetBills.findIndex((bill) => /phone/i.test(bill.name))
   const fallbackBillIndex = suggestedBillIndex >= 0 ? suggestedBillIndex : 0
   const suggestedBill = budgetBills[fallbackBillIndex]
-  const suggestedBillName = suggestedBill?.name ?? 'a bill'
+  const suggestedBillName = suggestedBill?.name ?? 'a monthly bill'
   const canApplySuggestion = Boolean(suggestedBill)
   const trendSource = weeklyAmounts.slice(0, 3)
   const trendMax = Math.max(...trendSource.map((amount) => Math.abs(amount)), 1)
@@ -931,69 +1014,121 @@ function App() {
     </div>
   )
 
+  const carouselCards = [
+    <div key="weekly-insights">
+      <span className="tag">Weekly insights</span>
+      <h4>Best week to schedule monthly bills</h4>
+      <p>
+        Week {bestWeekIndex} has the strongest cushion at{' '}
+        {formatCurrency(maxWeeklyAmount)}.
+      </p>
+      <div className="carousel-meta">
+        <span>Lowest: Week {tightWeekIndex}</span>
+        <span>Avg: {formatCurrency(averageWeekly)}</span>
+      </div>
+    </div>,
+    <div key="upcoming-bills">
+      <span className="tag">Upcoming bills</span>
+      <h4>Next on the calendar</h4>
+      <ul className="mini-list">
+        {upcomingBills.map((bill) => (
+          <li key={`cashflow-bill-${bill.name}`}>
+            <span>{bill.name}</span>
+            <span>
+              {bill.date} · {formatCurrency(bill.amount)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>,
+    <div key="what-if-shifts">
+      <span className="tag">What-if shifts</span>
+      <h4>Try quick bill schedule tweaks</h4>
+      <p>Move one scheduled bill by +1 week to ease Week {tightWeekIndex}.</p>
+      <p>Trim a flexible bill by $30 to lift the lowest week.</p>
+    </div>,
+    <div key="recommended">
+      <span className="tag">Recommended</span>
+      <h4>Next best action</h4>
+      <p>
+        Shift {suggestedBillName} to Week {bestWeekIndex} to smooth dips.
+      </p>
+      <button
+        className="ghost small"
+        type="button"
+        disabled={!canApplySuggestion}
+        onClick={() => {
+          if (!suggestedBill) {
+            showToast('Add a scheduled bill to apply a suggestion.')
+            return
+          }
+          setBudgetBills((prev) =>
+            prev.map((bill, index) =>
+              index === fallbackBillIndex
+                ? { ...bill, date: `Week ${bestWeekIndex}` }
+                : bill
+            )
+          )
+          showToast(`${suggestedBillName} moved to Week ${bestWeekIndex}.`)
+        }}
+      >
+        Apply suggestion
+      </button>
+    </div>,
+  ]
+  const carouselMaxIndex = Math.max(carouselCards.length - 1, 0)
+  const handleCarouselPrev = () => {
+    setCarouselIndex((prev) =>
+      carouselCards.length ? (prev - 1 + carouselCards.length) % carouselCards.length : 0
+    )
+  }
+  const handleCarouselNext = () => {
+    setCarouselIndex((prev) =>
+      carouselCards.length ? (prev + 1) % carouselCards.length : 0
+    )
+  }
   const cashflowCarousel = (
     <div className="cashflow-carousel" aria-label="Cash flow highlights">
-      <div className="carousel-track">
-        <div className="carousel-card">
-          <span className="tag">Weekly insights</span>
-          <h4>Best week to schedule bills</h4>
-          <p>
-            Week {bestWeekIndex} has the strongest cushion at{' '}
-            {formatCurrency(maxWeeklyAmount)}.
-          </p>
-          <div className="carousel-meta">
-            <span>Lowest: Week {tightWeekIndex}</span>
-            <span>Avg: {formatCurrency(averageWeekly)}</span>
-          </div>
+      <button
+        className="carousel-arrow"
+        type="button"
+        onClick={handleCarouselPrev}
+        aria-label="Previous highlight"
+      >
+        ‹
+      </button>
+      <div className="carousel-viewport">
+        <div
+          className="carousel-track"
+          style={{ transform: `translateX(-${carouselIndex * 100}%)` }}
+        >
+          {carouselCards.map((card, index) => (
+            <div className="carousel-card" key={`carousel-card-${index}`}>
+              {card}
+            </div>
+          ))}
         </div>
-        <div className="carousel-card">
-          <span className="tag">Upcoming bills</span>
-          <h4>Next on the calendar</h4>
-          <ul className="mini-list">
-            {upcomingBills.map((bill) => (
-              <li key={`cashflow-bill-${bill.name}`}>
-                <span>{bill.name}</span>
-                <span>
-                  {bill.date} · {formatCurrency(bill.amount)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="carousel-card">
-          <span className="tag">What-if shifts</span>
-          <h4>Try quick schedule tweaks</h4>
-          <p>Move one bill by +1 week to ease Week {tightWeekIndex}.</p>
-          <p>Trim a flexible category by $30 to lift the lowest week.</p>
-        </div>
-        <div className="carousel-card">
-          <span className="tag">Recommended</span>
-          <h4>Next best action</h4>
-          <p>
-            Shift {suggestedBillName} to Week {bestWeekIndex} to smooth dips.
-          </p>
+      </div>
+      <button
+        className="carousel-arrow"
+        type="button"
+        onClick={handleCarouselNext}
+        aria-label="Next highlight"
+      >
+        ›
+      </button>
+      <div className="carousel-dots" role="tablist" aria-label="Carousel pages">
+        {carouselCards.map((_card, index) => (
           <button
-            className="ghost small"
+            key={`carousel-dot-${index}`}
+            className={carouselIndex === index ? 'dot active' : 'dot'}
             type="button"
-            disabled={!canApplySuggestion}
-            onClick={() => {
-              if (!suggestedBill) {
-                showToast('Add a bill to apply a suggestion.')
-                return
-              }
-              setBudgetBills((prev) =>
-                prev.map((bill, index) =>
-                  index === fallbackBillIndex
-                    ? { ...bill, date: `Week ${bestWeekIndex}` }
-                    : bill
-                )
-              )
-              showToast(`${suggestedBillName} moved to Week ${bestWeekIndex}.`)
-            }}
+            onClick={() => setCarouselIndex(index)}
+            aria-current={carouselIndex === index ? 'true' : undefined}
           >
-            Apply suggestion
+            {index + 1}
           </button>
-        </div>
+        ))}
       </div>
     </div>
   )
@@ -1046,7 +1181,7 @@ function App() {
             <p className="eyebrow">Simple. Detailed. Yours.</p>
             <h1>A beautiful budgeting space anyone can finish in minutes.</h1>
             <p className="lead">
-              Build a complete budget with guided categories, smart defaults, and
+              Build a complete budget with guided monthly bills, smart defaults, and
               real-time cash flow. Customize every step without the overwhelm.
             </p>
             <div className="hero-cta">
@@ -1070,7 +1205,7 @@ function App() {
               </div>
               <div>
                 <strong>200+</strong>
-                <span>category templates</span>
+                <span>bill templates</span>
               </div>
               <div>
                 <strong>100%</strong>
@@ -1142,12 +1277,12 @@ function App() {
                           }
                           showToast(
                             checked
-                              ? 'Category suggestions enabled.'
-                              : 'Category suggestions off.'
+                          ? 'Bill suggestions enabled.'
+                          : 'Bill suggestions off.'
                           )
                         }}
                       />
-                      <span>Auto-suggest categories</span>
+                  <span>Auto-suggest bills</span>
                     </label>
                     <label className="toggle">
                       <input
@@ -1277,14 +1412,14 @@ function App() {
           <div className="step-grid">
             <article>
               <h3>1. Add income</h3>
-              <p>Start with take-home pay so every category is realistic.</p>
+              <p>Start with take-home pay so every bill is realistic.</p>
             </article>
             <article>
               <h3>2. Pick templates</h3>
               <p>Choose from essentials, lifestyle, debt, and goal packs.</p>
             </article>
             <article>
-              <h3>3. Plan bills</h3>
+              <h3>3. Plan monthly bills</h3>
               <p>Schedule due dates to see your cash flow week by week.</p>
             </article>
             <article>
@@ -1306,10 +1441,10 @@ function App() {
               onClick={() => {
                 setShowCategoryForm(true)
                 scrollTo(workspaceRef)
-                showToast('Category editor opened.')
+                showToast('Monthly bills editor opened.')
               }}
             >
-              Customize categories
+              Customize monthly bills
             </button>
           </div>
 
@@ -1322,14 +1457,14 @@ function App() {
               </small>
             </div>
             <div className="summary-card">
-              <span>Planned bills</span>
-              <strong>{formatCurrency(plannedBillsTotal)}</strong>
-              <small>{budgetBills.length} upcoming bills</small>
+              <span>Planned monthly bills</span>
+              <strong>{formatCurrency(plannedBillsDisplayTotal)}</strong>
+              <small>{plannedBillsDisplayCount} upcoming bills</small>
             </div>
             <div className="summary-card">
               <span>Savings + debt</span>
               <strong>{formatCurrency(savingsDebtTotal)}</strong>
-              <small>Targets from categories</small>
+              <small>Targets from monthly bills</small>
             </div>
             <div
               className={`summary-card highlight ${leftToBudget < 0 ? 'negative' : ''}`}
@@ -1339,7 +1474,7 @@ function App() {
               <small>
                 {leftToBudget < 0
                   ? 'Over budget this month'
-                  : 'Assign to categories'}
+                  : 'Assign to bills'}
               </small>
             </div>
           </div>
@@ -1347,12 +1482,12 @@ function App() {
           <div className="budget-grid">
             <div className="budget-card cashflow-card">
               <div className="card-head">
-                <h3>Categories</h3>
+                <h3>Monthly Bills</h3>
                 <button
                   className="ghost small"
                   onClick={() => setShowCategoryForm(true)}
                 >
-                  Add category
+                  Add bill
                 </button>
               </div>
               <div className="category-range">
@@ -1391,7 +1526,7 @@ function App() {
                 <div className="inline-form">
                   <input
                     type="text"
-                    placeholder="Category name"
+                    placeholder="Bill name"
                     value={newCategory.name}
                     onChange={(event) =>
                       setNewCategory((prev) => ({
@@ -1436,7 +1571,7 @@ function App() {
                 </div>
               ) : null}
               <div className="category-header">
-                <span>Category</span>
+                <span>Monthly bill</span>
                 <span>Planned</span>
                 <span>Status</span>
               </div>
@@ -1476,12 +1611,39 @@ function App() {
                               }))
                             }
                           />
+                          {(() => {
+                            const billIndex = budgetBills.findIndex(
+                              (bill) =>
+                                bill.name.toLowerCase() === category.name.toLowerCase()
+                            )
+                            const scheduledDate =
+                              billIndex >= 0 ? budgetBills[billIndex].date : ''
+                            return (
+                              <input
+                                type="date"
+                                value={formatDateForInput(scheduledDate)}
+                                onChange={(event) =>
+                                  handleScheduleBill(
+                                    category.name,
+                                    event.target.value,
+                                    category.planned
+                                  )
+                                }
+                              />
+                            )
+                          })()}
                           <div className="inline-actions">
                             <button
                               className="solid small"
                               onClick={() => handleSaveCategory(category.name)}
                             >
                               Save
+                            </button>
+                            <button
+                              className="danger small"
+                              onClick={() => handleDeleteCategory(category.name)}
+                            >
+                              Delete
                             </button>
                             <button
                               className="ghost small"
@@ -1564,9 +1726,8 @@ function App() {
                 ))}
               </div>
               {cashflowTrendBox}
-              {cashflowCarousel}
               <div className="hint">
-                <p>Tip: move a bill or paycheck to smooth the dips.</p>
+                <p>Tip: move a scheduled bill or paycheck to smooth the dips.</p>
                 <button
                   className="ghost small"
                   onClick={() => {
@@ -1577,11 +1738,89 @@ function App() {
                     )
                   }}
                 >
-                  Adjust schedule
+                  Adjust bill schedule
                 </button>
               </div>
             </div>
+            <div className="budget-card editor-card">
+              <div className="card-head">
+                <h3>Goals</h3>
+                <span className="tag">Edit in budget</span>
+              </div>
+              <div className="budget-editor-list">
+                {budgetGoals.map((goal) => (
+                  <div className="budget-editor-row" key={goal.name}>
+                    <input
+                      type="text"
+                      value={goal.name}
+                      onChange={(event) =>
+                        handleGoalChange(goal.name, 'name', event.target.value)
+                      }
+                    />
+                    <input
+                      type="number"
+                      value={goal.amount}
+                      onChange={(event) =>
+                        handleGoalChange(goal.name, 'amount', event.target.value)
+                      }
+                    />
+                    <input
+                      type="number"
+                      value={goal.target}
+                      onChange={(event) =>
+                        handleGoalChange(goal.name, 'target', event.target.value)
+                      }
+                    />
+                    <div className="row-actions">
+                      <button
+                        className="danger small"
+                        type="button"
+                        onClick={() => handleDeleteGoal(goal.name)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="inline-form compact">
+                <input
+                  type="text"
+                  placeholder="Goal name"
+                  value={newGoal.name}
+                  onChange={(event) =>
+                    setNewGoal((prev) => ({
+                      ...prev,
+                      name: event.target.value,
+                    }))
+                  }
+                />
+                <input
+                  type="number"
+                  placeholder="Target $"
+                  value={newGoal.target}
+                  onChange={(event) =>
+                    setNewGoal((prev) => ({
+                      ...prev,
+                      target: event.target.value,
+                    }))
+                  }
+                />
+                <div className="inline-actions">
+                  <button className="solid small" onClick={handleAddGoal}>
+                    Add goal
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
+          <section className="cashflow-carousel-strip">
+            <div className="card-head">
+              <h3>Cash flow highlights</h3>
+              <span className="tag">Tap arrows</span>
+            </div>
+            {cashflowCarousel}
+          </section>
           </section>
         ) : null}
 
@@ -1612,14 +1851,14 @@ function App() {
               </small>
             </div>
             <div className="summary-card">
-              <span>Planned bills</span>
-              <strong>{formatCurrency(plannedBillsTotal)}</strong>
-              <small>{budgetBills.length} upcoming bills</small>
+              <span>Planned monthly bills</span>
+              <strong>{formatCurrency(plannedBillsDisplayTotal)}</strong>
+              <small>{plannedBillsDisplayCount} upcoming bills</small>
             </div>
             <div className="summary-card">
-              <span>Planned categories</span>
-              <strong>{formatCurrency(plannedCategoryTotal)}</strong>
-              <small>{budgetCategories.length} categories</small>
+              <span>Scheduled bills</span>
+              <strong>{formatCurrency(plannedBillsTotal)}</strong>
+              <small>{budgetBills.length} scheduled</small>
             </div>
             <div
               className={`summary-card highlight ${leftToBudget < 0 ? 'negative' : ''}`}
@@ -1629,7 +1868,7 @@ function App() {
               <small>
                 {leftToBudget < 0
                   ? 'Over budget this month'
-                  : 'Assignable to categories'}
+                  : 'Assignable to bills'}
               </small>
             </div>
           </div>
@@ -1655,10 +1894,9 @@ function App() {
                 ))}
               </div>
               {cashflowTrendBox}
-              {cashflowCarousel}
               <div className="cashflow-controls">
                 <label>
-                  Shift schedule
+                  Shift bill schedule
                   <input
                     type="range"
                     min="0"
@@ -1700,7 +1938,7 @@ function App() {
                 {stressWeeks.length ? (
                   <p>
                     Tight in {stressWeeks.map((week) => week.label).join(', ')}.
-                    Consider shifting bills or trimming one category.
+                    Consider shifting scheduled bills or trimming one bill.
                   </p>
                 ) : (
                   <p>You have a smooth month with no cash flow dips flagged.</p>
@@ -1718,9 +1956,16 @@ function App() {
               </button>
             </div>
           </div>
+          <section className="cashflow-carousel-strip">
+            <div className="card-head">
+              <h3>Cash flow highlights</h3>
+              <span className="tag">Tap arrows</span>
+            </div>
+            {cashflowCarousel}
+          </section>
           <div className="cashflow-panel">
             <div className="card-head">
-              <h3>Bill shift simulator</h3>
+              <h3>Bill schedule simulator</h3>
               <span className="tag">Drag to move</span>
             </div>
             <div className="bill-shift-list">
@@ -1762,7 +2007,9 @@ function App() {
                 </div>
               ))}
             </div>
-            <p className="muted">Moving a bill updates the weekly cash flow above.</p>
+            <p className="muted">
+              Moving a scheduled bill updates the weekly cash flow above.
+            </p>
           </div>
           <div className="cashflow-help">
             <div className="card-head">
@@ -1774,22 +2021,22 @@ function App() {
                 <h4>Weekly cash flow</h4>
                 <p>
                   Each bar shows how much cash you have left that week after
-                  planned bills and categories. Longer bars mean more breathing
+                  planned monthly bills. Longer bars mean more breathing
                   room; shorter bars mean tighter weeks.
                 </p>
               </div>
               <div>
-                <h4>Shift schedule</h4>
+                <h4>Shift bill schedule</h4>
                 <p>
-                  This slider simulates moving bill timing earlier or later in the
+                  This slider simulates moving bill schedule timing earlier or later in the
                   month. “Even” spreads cash evenly, while “Front” or “End” shifts
                   cash toward the start or end of the month.
                 </p>
               </div>
               <div>
-                <h4>Bill shift simulator</h4>
+                <h4>Schedule shift simulator</h4>
                 <p>
-                  Slide each bill between weeks to see how timing changes your cash
+                  Slide each scheduled bill between weeks to see how timing changes your cash
                   flow. Adjust the dollar amount to see immediate impact.
                 </p>
               </div>
@@ -1804,7 +2051,7 @@ function App() {
               <div>
                 <h4>Smooth this month</h4>
                 <p>
-                  Jump to the bill schedule editor to shift bill dates and even out
+                  Jump to the bill schedule editor to shift dates and even out
                   cash flow dips.
                 </p>
               </div>
@@ -1817,15 +2064,15 @@ function App() {
           <section className="planner" ref={plannerRef}>
           <div className="section-head">
             <div>
-              <h2>Plan for bills, goals, and surprises</h2>
-              <p>Never miss a due date and keep goals on pace.</p>
+              <h2>Plan for monthly bills, goals, and surprises</h2>
+              <p>Keep due dates and goals on pace.</p>
             </div>
           </div>
           <div className="planner-grid">
             <div className="planner-card">
               <h3>Upcoming bills</h3>
               <ul>
-                {budgetBills.map((bill) => (
+                {scheduledBills.map((bill) => (
                   <li key={bill.name}>
                     <span>{bill.name}</span>
                     <strong>{formatCurrency(bill.amount)}</strong>
@@ -1907,7 +2154,7 @@ function App() {
                 <button onClick={() => handleQuickAdd('Gifts')}>Gifts</button>
               </div>
               <p className="muted">
-                Tap once to add a category with smart defaults.
+                Tap once to add a bill with smart defaults.
               </p>
             </div>
           </div>
@@ -2213,8 +2460,8 @@ function App() {
               </button>
             </div>
             <div className="personal-card">
-              <h3>Flexible categories</h3>
-              <p>Pause, rename, or merge categories any time.</p>
+              <h3>Flexible bills</h3>
+              <p>Pause, rename, or merge bills any time.</p>
               <button
                 className="ghost small"
                 onClick={() =>
@@ -2282,8 +2529,8 @@ function App() {
             <h3>
               {activePanel === 'cadence' && 'Pay cadence'}
               {activePanel === 'strategy' && 'Debt strategy'}
-              {activePanel === 'labels' && 'Category labels'}
-              {activePanel === 'schedule' && 'Bill schedule'}
+              {activePanel === 'labels' && 'Bill labels'}
+              {activePanel === 'schedule' && 'Monthly bills schedule'}
             </h3>
             <button className="ghost small" onClick={() => setActivePanel(null)}>
               Close
@@ -2431,6 +2678,13 @@ function App() {
                         handleBillChange(index, 'amount', event.target.value)
                       }
                     />
+                    <button
+                      className="danger small"
+                      type="button"
+                      onClick={() => handleDeleteBill(index)}
+                    >
+                      Delete
+                    </button>
                   </div>
                 ))}
               </div>
@@ -2438,10 +2692,10 @@ function App() {
                 className="solid small"
                 onClick={() => {
                   setActivePanel(null)
-                  showToast('Bill schedule updated.')
+                  showToast('Monthly bills updated.')
                 }}
               >
-                Save schedule
+                Save bill schedule
               </button>
             </div>
           ) : null}
