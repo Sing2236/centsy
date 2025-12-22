@@ -140,12 +140,6 @@ function App() {
   })
   const [robinhoodConnected, setRobinhoodConnected] = useState(false)
   const [stocks, setStocks] = useState<Stock[]>([])
-  const [newStock, setNewStock] = useState({
-    symbol: '',
-    shares: '',
-    price: '',
-    monthly: '',
-  })
   const [expectedReturn, setExpectedReturn] = useState(7)
   const [monthlyInvestment, setMonthlyInvestment] = useState(200)
   const [incomePerPaycheck, setIncomePerPaycheck] = useState(2100)
@@ -199,7 +193,6 @@ function App() {
     'workspace' | 'cashflow' | 'planner' | 'invest' | 'copilot' | 'personalize'
   >('workspace')
   const [categoryRange, setCategoryRange] = useState({ min: 0, max: 3000 })
-  const [billSliderValues, setBillSliderValues] = useState<number[]>([])
   const currentYear = new Date().getFullYear()
 
   const builderRef = useRef<HTMLDivElement | null>(null)
@@ -694,14 +687,6 @@ function App() {
       setExpectedReturn(Number(updates.expectedReturn))
     }
   }
-
-  useEffect(() => {
-    setBillSliderValues((prev) =>
-      budgetBills.map((bill, index) =>
-        typeof prev[index] === 'number' ? prev[index] : bill.amount
-      )
-    )
-  }, [budgetBills])
 
   const handleSendChat = async () => {
     if (!chatInput.trim()) return
