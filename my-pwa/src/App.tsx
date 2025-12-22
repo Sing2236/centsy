@@ -239,6 +239,13 @@ function App() {
     toastTimer.current = window.setTimeout(() => setToast(''), 2500)
   }
 
+  const requireLogin = (message: string) => {
+    if (userEmail) return true
+    showToast(message)
+    setShowLogin(true)
+    return false
+  }
+
   const scrollTo = (ref: { current: HTMLDivElement | null }) => {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
@@ -385,6 +392,9 @@ function App() {
   }
 
   const handleGenerateBudget = () => {
+    if (!requireLogin('Please log in to generate your budget.')) {
+      return
+    }
     if (autoSuggest) {
       const baseIncome = 4200
       const scale = monthlyIncome > 0 ? monthlyIncome / baseIncome : 1
@@ -634,6 +644,9 @@ function App() {
   }
 
   const handleExportCsv = () => {
+    if (!requireLogin('Please log in to export your budget.')) {
+      return
+    }
     const now = new Date()
     const dateStamp = now.toISOString().slice(0, 10)
     const escapeCsv = (value: string | number) => {
@@ -1016,6 +1029,9 @@ function App() {
             <button
               className="solid"
               onClick={() => {
+                if (!requireLogin('Please log in to start your budget.')) {
+                  return
+                }
                 scrollTo(builderRef)
                 showToast('Budget setup started.')
               }}
@@ -1037,6 +1053,9 @@ function App() {
               <button
                 className="solid"
                 onClick={() => {
+                  if (!requireLogin('Please log in to start your budget.')) {
+                    return
+                  }
                   scrollTo(builderRef)
                   showToast('Budget setup started.')
                 }}
@@ -1061,125 +1080,150 @@ function App() {
           </div>
 
           <div className="hero-panel" ref={builderRef}>
-            <div className="panel-head">
-              <h2>Budget builder</h2>
-              <p>Answer a few questions to generate your first plan.</p>
-            </div>
-            <div className="panel-body">
-              <label>
-                Take-home per paycheck
-                <input
-                  type="number"
-                  value={incomePerPaycheck}
-                  onChange={(event) =>
-                    setIncomePerPaycheck(Number(event.target.value || 0))
-                  }
-                />
-                <span className="helper">
-                  Monthly total: {formatCurrency(monthlyIncome)}
-                </span>
-              </label>
-              <label>
-                Pay frequency
-                <select
-                  value={payFrequency}
-                  onChange={(event) => {
-                    setPayFrequency(event.target.value)
-                    showToast('Pay frequency updated.')
-                  }}
-                >
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Every 2 weeks</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </label>
-              <label>
-                Primary goal
-                <select
-                  value={primaryGoal}
-                  onChange={(event) => {
-                    setPrimaryGoal(event.target.value)
-                    showToast(`Primary goal set to ${event.target.value}.`)
-                  }}
-                >
-                  <option value="stability">Stability</option>
-                  <option value="debt">Pay off debt</option>
-                  <option value="savings">Save more</option>
-                  <option value="flex">More flexibility</option>
-                </select>
-              </label>
-              <div className="toggle-row">
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={autoSuggest}
-                    onChange={(event) => {
-                      const checked = event.target.checked
-                      setAutoSuggest(checked)
-                      if (checked && budgetCategories.length === 0) {
-                        setBudgetCategories(categoriesSeed)
+            {userEmail ? (
+              <>
+                <div className="panel-head">
+                  <h2>Budget builder</h2>
+                  <p>Answer a few questions to generate your first plan.</p>
+                </div>
+                <div className="panel-body">
+                  <label>
+                    Take-home per paycheck
+                    <input
+                      type="number"
+                      value={incomePerPaycheck}
+                      onChange={(event) =>
+                        setIncomePerPaycheck(Number(event.target.value || 0))
                       }
-                      showToast(
-                        checked
-                          ? 'Category suggestions enabled.'
-                          : 'Category suggestions off.'
-                      )
-                    }}
-                  />
-                  <span>Auto-suggest categories</span>
-                </label>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={includePartner}
-                    onChange={(event) => {
-                      setIncludePartner(event.target.checked)
-                      showToast(
-                        event.target.checked
-                          ? 'Partner income enabled.'
-                          : 'Partner income removed.'
-                      )
-                    }}
-                  />
-                  <span>Include partner income</span>
-                </label>
-              </div>
-              {includePartner ? (
-                <label>
-                  Partner monthly income
-                  <input
-                    type="number"
-                    value={partnerIncome}
-                    onChange={(event) =>
-                      setPartnerIncome(Number(event.target.value || 0))
-                    }
-                  />
-                </label>
-              ) : null}
-            </div>
-            <div className="panel-footer">
-              <button
-                className="solid"
-                onClick={handleGenerateBudget}
-                type="button"
-              >
-                Generate my budget
-              </button>
-              {budgetGenerated ? (
-                <p className="panel-note success" role="status">
-                  Budget generated. Scroll down to review your plan.
-                </p>
-              ) : (
-                <p className="panel-note">
-                  You can edit everything after we build the first draft.
-                </p>
-              )}
-            </div>
+                    />
+                    <span className="helper">
+                      Monthly total: {formatCurrency(monthlyIncome)}
+                    </span>
+                  </label>
+                  <label>
+                    Pay frequency
+                    <select
+                      value={payFrequency}
+                      onChange={(event) => {
+                        setPayFrequency(event.target.value)
+                        showToast('Pay frequency updated.')
+                      }}
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Every 2 weeks</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </label>
+                  <label>
+                    Primary goal
+                    <select
+                      value={primaryGoal}
+                      onChange={(event) => {
+                        setPrimaryGoal(event.target.value)
+                        showToast(`Primary goal set to ${event.target.value}.`)
+                      }}
+                    >
+                      <option value="stability">Stability</option>
+                      <option value="debt">Pay off debt</option>
+                      <option value="savings">Save more</option>
+                      <option value="flex">More flexibility</option>
+                    </select>
+                  </label>
+                  <div className="toggle-row">
+                    <label className="toggle">
+                      <input
+                        type="checkbox"
+                        checked={autoSuggest}
+                        onChange={(event) => {
+                          const checked = event.target.checked
+                          setAutoSuggest(checked)
+                          if (checked && budgetCategories.length === 0) {
+                            setBudgetCategories(categoriesSeed)
+                          }
+                          showToast(
+                            checked
+                              ? 'Category suggestions enabled.'
+                              : 'Category suggestions off.'
+                          )
+                        }}
+                      />
+                      <span>Auto-suggest categories</span>
+                    </label>
+                    <label className="toggle">
+                      <input
+                        type="checkbox"
+                        checked={includePartner}
+                        onChange={(event) => {
+                          setIncludePartner(event.target.checked)
+                          showToast(
+                            event.target.checked
+                              ? 'Partner income enabled.'
+                              : 'Partner income removed.'
+                          )
+                        }}
+                      />
+                      <span>Include partner income</span>
+                    </label>
+                  </div>
+                  {includePartner ? (
+                    <label>
+                      Partner monthly income
+                      <input
+                        type="number"
+                        value={partnerIncome}
+                        onChange={(event) =>
+                          setPartnerIncome(Number(event.target.value || 0))
+                        }
+                      />
+                    </label>
+                  ) : null}
+                </div>
+                <div className="panel-footer">
+                  <button
+                    className="solid"
+                    onClick={handleGenerateBudget}
+                    type="button"
+                  >
+                    Generate my budget
+                  </button>
+                  {budgetGenerated ? (
+                    <p className="panel-note success" role="status">
+                      Budget generated. Scroll down to review your plan.
+                    </p>
+                  ) : (
+                    <p className="panel-note">
+                      You can edit everything after we build the first draft.
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="panel-head">
+                  <h2>Budget builder</h2>
+                  <p>Log in to keep your numbers private and personalized.</p>
+                </div>
+                <div className="panel-footer">
+                  <button
+                    className="solid"
+                    onClick={() => setShowLogin(true)}
+                    type="button"
+                  >
+                    Log in to start
+                  </button>
+                  <p className="panel-note">
+                    Your budget details appear after you sign in.
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
 
       <main>
+        {userEmail ? (
+          <>
         <section className="view-switcher">
           <div className="tab-row">
             <button
@@ -2198,6 +2242,35 @@ function App() {
             </button>
           </div>
         </section>
+          </>
+        ) : (
+          <section className="locked-state">
+            <div className="locked-card">
+              <span className="tag">Login required</span>
+              <h2>Sign in to view your budget</h2>
+              <p>We keep your numbers private until you are logged in.</p>
+              <div className="locked-actions">
+                <button className="solid" onClick={() => setShowLogin(true)}>
+                  Log in to continue
+                </button>
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    setAuthMode('signup')
+                    setShowLogin(true)
+                  }}
+                >
+                  Create account
+                </button>
+              </div>
+              <div className="locked-dots" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          </section>
+        )}
       </main>
       <footer className="site-footer">
         <p>© {currentYear} Centsy. All rights reserved.</p>
