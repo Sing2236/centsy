@@ -73,6 +73,9 @@ Rules:
 - If you need clarification, ask a question in "reply" and set "updates" to null.
 - Only include "updates" for fields you want to change.
 - Prefer incremental changes, not sweeping replacements, unless asked.
+- When adding bills, update both "budgetCategories" and "budgetBills".
+- If a bill date is not provided, use "Unscheduled" and set "recurringDay" to null.
+- For new budget categories from bills, set "planned" to the bill amount and "actual" to 0.
 `
 
     const payload = {
@@ -113,10 +116,31 @@ Rules:
     const content = data?.choices?.[0]?.message?.content ?? ''
 
     let parsed: { reply?: string; summary?: string; updates?: Record<string, unknown> }
+    const extractJson = (text: string) => {
+      const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i)
+      if (fencedMatch) {
+        return fencedMatch[1].trim()
+      }
+      const start = text.indexOf('{')
+      const end = text.lastIndexOf('}')
+      if (start >= 0 && end > start) {
+        return text.slice(start, end + 1)
+      }
+      return null
+    }
     try {
       parsed = JSON.parse(content)
     } catch {
-      parsed = { reply: content, updates: null }
+      const extracted = extractJson(content)
+      if (extracted) {
+        try {
+          parsed = JSON.parse(extracted)
+        } catch {
+          parsed = { reply: content, updates: null }
+        }
+      } else {
+        parsed = { reply: content, updates: null }
+      }
     }
 
     return new Response(

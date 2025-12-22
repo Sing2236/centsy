@@ -879,13 +879,29 @@ function App() {
     ) =>
       items.map((item) => ({
         name: item.name,
-        date: item.date,
+        date: item.date && item.date.trim() ? item.date : 'Unscheduled',
         amount: Number(item.amount ?? 0),
         recurringDay:
           item.recurringDay !== undefined && item.recurringDay !== null
             ? Number(item.recurringDay)
             : null,
       }))
+    const mergeCategoriesWithBills = (
+      categories: typeof categoriesSeed,
+      bills: Array<{ name: string; amount: number }>
+    ) => {
+      const existing = new Set(
+        categories.map((category) => category.name.toLowerCase())
+      )
+      const additions = bills
+        .filter((bill) => bill.name && !existing.has(bill.name.toLowerCase()))
+        .map((bill) => ({
+          name: bill.name,
+          planned: Number(bill.amount ?? 0),
+          actual: 0,
+        }))
+      return additions.length ? [...categories, ...additions] : categories
+    }
     const normalizeStocks = (
       items: Array<{
         symbol: string
@@ -952,14 +968,26 @@ function App() {
     if ('budgetGenerated' in updates && updates.budgetGenerated !== undefined) {
       setBudgetGenerated(updates.budgetGenerated)
     }
-    if ('budgetCategories' in updates && Array.isArray(updates.budgetCategories)) {
-      setBudgetCategories(normalizeCategories(updates.budgetCategories))
+    const nextCategories =
+      'budgetCategories' in updates && Array.isArray(updates.budgetCategories)
+        ? normalizeCategories(updates.budgetCategories)
+        : null
+    const nextBills =
+      'budgetBills' in updates && Array.isArray(updates.budgetBills)
+        ? normalizeBills(updates.budgetBills)
+        : null
+    if (nextBills) {
+      setBudgetBills(nextBills)
+    }
+    if (nextCategories) {
+      setBudgetCategories(
+        nextBills ? mergeCategoriesWithBills(nextCategories, nextBills) : nextCategories
+      )
+    } else if (nextBills) {
+      setBudgetCategories((prev) => mergeCategoriesWithBills(prev, nextBills))
     }
     if ('budgetGoals' in updates && Array.isArray(updates.budgetGoals)) {
       setBudgetGoals(normalizeGoals(updates.budgetGoals))
-    }
-    if ('budgetBills' in updates && Array.isArray(updates.budgetBills)) {
-      setBudgetBills(normalizeBills(updates.budgetBills))
     }
     if ('labels' in updates && Array.isArray(updates.labels)) {
       setLabels(updates.labels)
@@ -1171,6 +1199,119 @@ function App() {
     return { actions }
   }
 
+  const parseAmount = (text: string) => {
+    const match = text.match(/(\d{1,3}(?:,\d{3})*|\d+)(?:\.\d{2})/)
+    if (!match) return null
+    const normalized = match[0].replace(/,/g, '')
+    const value = Number.parseFloat(normalized)
+    return Number.isNaN(value) ? null : value
+  }
+
+  const parseBillsFromText = (text: string) => {
+    const amountRegex = /(\d{1,3}(?:,\d{3})*|\d+)(?:\.\d{2})/g
+    const tail = text.includes(':') ? text.split(':').slice(1).join(':') : text
+    const lines = tail
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+    const chunks = lines.length > 1 ? lines : [tail.trim()]
+    const items: Array<{ name: string; amount: number }> = []
+    const missing: string[] = []
+
+    chunks.forEach((chunk) => {
+      const amountMatches = [...chunk.matchAll(amountRegex)]
+      if (amountMatches.length === 0) {
+        if (/^[A-Z\s]+$/.test(chunk)) {
+          return
+        }
+        missing.push(chunk)
+        return
+      }
+      if (amountMatches.length === 1 && lines.length > 1) {
+        const amount = parseAmount(chunk) ?? 0
+        const name = chunk.replace(amountRegex, '').trim()
+        if (name) {
+          items.push({ name, amount })
+        }
+        return
+      }
+      let cursor = 0
+      amountMatches.forEach((match) => {
+        const namePart = chunk.slice(cursor, match.index).trim()
+        const amount = parseAmount(match[0]) ?? 0
+        if (namePart) {
+          items.push({ name: namePart, amount })
+        }
+        cursor = (match.index ?? 0) + match[0].length
+      })
+      const trailing = chunk.slice(cursor).trim()
+      if (trailing) {
+        missing.push(trailing)
+      }
+    })
+
+    const normalized = items
+      .map((item) => ({
+        name: item.name.replace(/\s+/g, ' ').trim(),
+        amount: item.amount,
+      }))
+      .filter((item) => item.name.length > 0)
+    const totalAmountMatches = [...tail.matchAll(amountRegex)].length
+    if (normalized.length < 2 && totalAmountMatches < 2) {
+      return null
+    }
+    return { items: normalized, missing }
+  }
+
+  const mergeBills = (
+    current: BudgetBill[],
+    additions: Array<{ name: string; amount: number }>
+  ) => {
+    const next = [...current]
+    additions.forEach((bill) => {
+      const nameKey = bill.name.toLowerCase()
+      const index = next.findIndex(
+        (item) => item.name.toLowerCase() === nameKey
+      )
+      if (index >= 0) {
+        next[index] = {
+          ...next[index],
+          amount: bill.amount > 0 ? bill.amount : next[index].amount,
+        }
+      } else {
+        next.push({
+          name: bill.name,
+          date: 'Unscheduled',
+          amount: bill.amount,
+          recurringDay: null,
+        })
+      }
+    })
+    return next
+  }
+
+  const mergeCategoriesFromBills = (
+    current: typeof categoriesSeed,
+    additions: Array<{ name: string; amount: number }>
+  ) => {
+    const next = [...current]
+    additions.forEach((bill) => {
+      const nameKey = bill.name.toLowerCase()
+      const index = next.findIndex(
+        (item) => item.name.toLowerCase() === nameKey
+      )
+      if (index >= 0) {
+        next[index] = {
+          ...next[index],
+          planned: bill.amount > 0 ? bill.amount : next[index].planned,
+        }
+      } else {
+        next.push({ name: bill.name, planned: bill.amount, actual: 0 })
+      }
+    })
+    return next
+  }
+
   const handleSendChat = async () => {
     const userMessage = chatInput.trim()
     if (!userMessage) return
@@ -1219,6 +1360,36 @@ function App() {
     setPendingUpdates(null)
     setPendingLocalAction(null)
     setPendingSummary('')
+
+    const parsedBills = parseBillsFromText(userMessage)
+    if (parsedBills) {
+      const nextBills = mergeBills(budgetBills, parsedBills.items)
+      const nextCategories = mergeCategoriesFromBills(
+        budgetCategories,
+        parsedBills.items
+      )
+      const missingCount = parsedBills.missing.length
+      const missingNote = missingCount
+        ? ` I could not find amounts for: ${parsedBills.missing.join(', ')}.`
+        : ''
+      setPendingUpdates({
+        budgetBills: nextBills,
+        budgetCategories: nextCategories,
+      })
+      setPendingSummary(
+        `Add ${parsedBills.items.length} bills to your budget?${missingNote}`
+      )
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            'I parsed those bills. Say "apply" or click Apply changes to add them.',
+        },
+      ])
+      setChatLoading(false)
+      return
+    }
 
     const localAction = getLocalCopilotAction(userMessage)
     if (localAction) {
