@@ -824,7 +824,6 @@ function App() {
   }, 0)
   const leftToBudget =
     monthlyIncome - plannedBillsTotal - plannedCategoryTotal - monthlyInvestment
-  const availableCash = Math.max(leftToBudget, 0)
   const weeklyBaseWeights = [0.3, 0.25, 0.28, 0.17]
   const weeklyWeights = weeklyBaseWeights.map(
     (_, index) =>
