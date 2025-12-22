@@ -2184,7 +2184,7 @@ function App() {
               </div>
               <button
                 className="solid"
-                onClick={handleAuthSubmit}
+                onClick={handleLogin}
                 disabled={authLoading}
               >
                 {authLoading
