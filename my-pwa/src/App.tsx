@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import './App.extra.css'
 import { supabase } from './supabaseClient'
 import centsyLogo from './assets/centsy-logo.svg'
 
@@ -52,10 +53,10 @@ const goalsSeed = [
 ]
 
 const billsSeed = [
-  { name: 'Rent', date: 'Mar 1', amount: 1200 },
-  { name: 'Phone', date: 'Mar 5', amount: 80 },
-  { name: 'Car insurance', date: 'Mar 12', amount: 165 },
-  { name: 'Streaming bundle', date: 'Mar 19', amount: 24 },
+  { name: 'Rent', date: 'Mar 1', amount: 1200, recurringDay: null },
+  { name: 'Phone', date: 'Mar 5', amount: 80, recurringDay: null },
+  { name: 'Car insurance', date: 'Mar 12', amount: 165, recurringDay: null },
+  { name: 'Streaming bundle', date: 'Mar 19', amount: 24, recurringDay: null },
 ]
 
 const formatCurrency = (value: number) => {
@@ -85,7 +86,14 @@ const goalPace = (amount: number, target: number) => {
   return `${Math.min(100, Math.round((amount / target) * 100))}%`
 }
 
-const billWeekIndex = (dateLabel: string) => {
+const billWeekIndex = (dateLabel: string, recurringDay?: number | null) => {
+  if (recurringDay && !Number.isNaN(recurringDay)) {
+    const day = Math.min(31, Math.max(1, recurringDay))
+    if (day <= 7) return 1
+    if (day <= 14) return 2
+    if (day <= 21) return 3
+    return 4
+  }
   const isoMatch = dateLabel.match(/^\d{4}-\d{2}-\d{2}$/)
   if (isoMatch) {
     const parsed = new Date(dateLabel)
@@ -119,6 +127,23 @@ const formatDateForInput = (dateLabel: string) => {
   }
   return ''
 }
+
+const extractDayFromLabel = (dateLabel: string) => {
+  const isoMatch = dateLabel.match(/^\d{4}-\d{2}-\d{2}$/)
+  if (isoMatch) {
+    const parsed = new Date(dateLabel)
+    const day = parsed.getDate()
+    return Number.isNaN(day) ? null : day
+  }
+  const match = dateLabel.match(/(\d{1,2})/)
+  if (!match) return null
+  const day = Number(match[1])
+  return Number.isNaN(day) ? null : day
+}
+
+const formatBillDateLabel = (bill: { date: string; recurringDay?: number | null }) =>
+  bill.recurringDay ? `Monthly on ${bill.recurringDay}` : bill.date
+
 
 function App() {
   const [budgetGenerated, setBudgetGenerated] = useState(false)
@@ -181,12 +206,29 @@ function App() {
   const [scheduleBias, setScheduleBias] = useState(0)
   const [chatMessages, setChatMessages] = useState<
     Array<{ role: 'user' | 'assistant'; content: string }>
-  >([])
+  >([
+    {
+      role: 'assistant',
+      content:
+        "I'm your Budget Copilot. Tell me what to change and I'll suggest a plan. I only apply changes after you say \"apply\".",
+    },
+  ])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [pendingUpdates, setPendingUpdates] = useState<Partial<BudgetState> | null>(
     null
   )
+  const [pendingLocalAction, setPendingLocalAction] = useState<{
+    actions: Array<
+      | 'resetBudget'
+      | 'clearBills'
+      | 'clearGoals'
+      | 'clearSchedule'
+      | 'clearLabels'
+      | 'resetPreferences'
+      | 'resetEverything'
+    >
+  } | null>(null)
   const [pendingSummary, setPendingSummary] = useState('')
   const [carouselIndex, setCarouselIndex] = useState(0)
   const [activeView, setActiveView] = useState<
@@ -527,22 +569,60 @@ function App() {
     )
   }
 
+  const handleBillRecurringToggle = (index: number, enabled: boolean) => {
+    setBudgetBills((prev) =>
+      prev.map((bill, billIndex) => {
+        if (billIndex !== index) return bill
+        if (!enabled) {
+          return { ...bill, recurringDay: null }
+        }
+        const inferredDay = extractDayFromLabel(bill.date) ?? 1
+        return { ...bill, recurringDay: inferredDay }
+      })
+    )
+  }
+
+  const handleBillRecurringDayChange = (index: number, value: string) => {
+    const nextDay = Math.min(31, Math.max(1, Number(value || 1)))
+    setBudgetBills((prev) =>
+      prev.map((bill, billIndex) =>
+        billIndex === index ? { ...bill, recurringDay: nextDay } : bill
+      )
+    )
+  }
+
   const handleDeleteBill = (index: number) => {
     setBudgetBills((prev) => prev.filter((_bill, billIndex) => billIndex !== index))
     showToast('Bill removed.')
   }
 
-  const handleScheduleBill = (name: string, date: string, amount: number) => {
+  const handleScheduleBill = (
+    name: string,
+    date: string,
+    amount: number,
+    recurringDay?: number | null
+  ) => {
     setBudgetBills((prev) => {
       const billIndex = prev.findIndex(
         (bill) => bill.name.toLowerCase() === name.toLowerCase()
       )
       if (billIndex < 0) {
-        return [...prev, { name, date, amount }]
+        return [
+          ...prev,
+          { name, date, amount, recurringDay: recurringDay ?? null },
+        ]
       }
-      return prev.map((bill, index) =>
-        index === billIndex ? { ...bill, date, amount } : bill
-      )
+      return prev.map((bill, index) => {
+        if (index !== billIndex) return bill
+        const nextRecurringDay =
+          recurringDay === undefined ? bill.recurringDay ?? null : recurringDay
+        return {
+          ...bill,
+          date,
+          amount,
+          recurringDay: nextRecurringDay,
+        }
+      })
     })
   }
 
@@ -583,12 +663,21 @@ function App() {
         target: Number(item.target ?? 0),
       }))
     const normalizeBills = (
-      items: Array<{ name: string; date: string; amount: number | string }>
+      items: Array<{
+        name: string
+        date: string
+        amount: number | string
+        recurringDay?: number | null
+      }>
     ) =>
       items.map((item) => ({
         name: item.name,
         date: item.date,
         amount: Number(item.amount ?? 0),
+        recurringDay:
+          item.recurringDay !== undefined && item.recurringDay !== null
+            ? Number(item.recurringDay)
+            : null,
       }))
     const normalizeStocks = (
       items: Array<{
@@ -688,17 +777,261 @@ function App() {
     }
   }
 
+  const applyLocalAction = (action: {
+    actions: Array<
+      | 'resetBudget'
+      | 'clearBills'
+      | 'clearGoals'
+      | 'clearSchedule'
+      | 'clearLabels'
+      | 'resetPreferences'
+      | 'resetEverything'
+    >
+  }) => {
+    const actions = new Set(action.actions)
+    const resetEverything = actions.has('resetEverything')
+    const resetBudget = actions.has('resetBudget') || resetEverything
+    const clearBills = actions.has('clearBills') || resetEverything
+    const clearGoals = actions.has('clearGoals') || resetEverything
+    const clearSchedule = actions.has('clearSchedule') || resetEverything
+    const resetPreferences = actions.has('resetPreferences') || resetEverything
+    const clearLabels = actions.has('clearLabels')
+
+    if (resetBudget) {
+      setBudgetCategories(categoriesSeed)
+      setBudgetGoals(goalsSeed)
+      setBudgetBills(billsSeed)
+      setBudgetGenerated(true)
+    } else {
+      if (clearBills) {
+        setBudgetCategories([])
+        setBudgetBills([])
+      }
+      if (clearGoals) {
+        setBudgetGoals([])
+      }
+      if (clearSchedule) {
+        setBudgetBills([])
+      }
+    }
+
+    if (resetPreferences) {
+      setIncomePerPaycheck(2100)
+      setPartnerIncome(0)
+      setPayFrequency('biweekly')
+      setPrimaryGoal('stability')
+      setAutoSuggest(true)
+      setIncludePartner(false)
+      setMonthlyBuffer(150)
+      setNotificationWeeklySummary(true)
+      setNotificationOverBudget(true)
+      setNotificationBillReminders(true)
+      setNotificationReminderDays(3)
+      setAutoSaveEnabled(true)
+      setDebtStrategy('avalanche')
+      setScheduleBias(0)
+    }
+
+    if (resetEverything) {
+      setLabels(['Essential', 'Lifestyle', 'Savings'])
+    } else if (clearLabels) {
+      setLabels([])
+    }
+  }
+
+  const describeLocalActions = (action: {
+    actions: Array<
+      | 'resetBudget'
+      | 'clearBills'
+      | 'clearGoals'
+      | 'clearSchedule'
+      | 'clearLabels'
+      | 'resetPreferences'
+      | 'resetEverything'
+    >
+  }) => {
+    const descriptions: Record<string, string> = {
+      resetBudget: 'reset your budget to defaults',
+      clearBills: 'clear all bills',
+      clearGoals: 'clear all goals',
+      clearSchedule: 'clear the bill schedule',
+      clearLabels: 'clear your labels',
+      resetPreferences: 'reset your preferences',
+      resetEverything: 'reset everything',
+    }
+    return action.actions.map((item) => descriptions[item]).filter(Boolean)
+  }
+
+  const getLocalCopilotAction = (message: string) => {
+    const text = message.toLowerCase()
+    const isNegated =
+      /\b(don't|do not|dont)\b/.test(text) &&
+      /\b(delete|clear|reset|remove|wipe)\b/.test(text)
+    if (isNegated) {
+      return null
+    }
+
+    const matchesAny = (phrases: string[]) =>
+      phrases.some((phrase) => text.includes(phrase))
+
+    const resetEverything = matchesAny([
+      'reset everything',
+      'reset all',
+      'start over',
+      'factory reset',
+      'wipe everything',
+    ])
+    const resetBudget = matchesAny([
+      'reset budget',
+      'fresh budget',
+      'new budget',
+      'start a new budget',
+    ])
+    const clearBills =
+      matchesAny([
+        'delete all bills',
+        'delete bills',
+        'remove all bills',
+        'clear bills',
+        'clear all bills',
+      ]) || resetEverything
+    const clearGoals =
+      matchesAny(['clear goals', 'delete goals', 'remove goals']) ||
+      resetEverything
+    const clearSchedule =
+      matchesAny([
+        'clear schedule',
+        'clear bill schedule',
+        'clear cash flow schedule',
+        'remove schedule',
+      ]) || resetEverything
+    const wantsClearLabels = matchesAny([
+      'clear labels',
+      'remove labels',
+      'delete labels',
+    ])
+    const clearLabels = wantsClearLabels && !resetEverything
+    const resetPreferences =
+      matchesAny(['reset preferences', 'reset settings', 'clear preferences']) ||
+      resetEverything
+
+    if (
+      !resetBudget &&
+      !clearBills &&
+      !clearGoals &&
+      !clearSchedule &&
+      !clearLabels &&
+      !resetPreferences &&
+      !resetEverything
+    ) {
+      return null
+    }
+
+    const actions: Array<
+      | 'resetBudget'
+      | 'clearBills'
+      | 'clearGoals'
+      | 'clearSchedule'
+      | 'clearLabels'
+      | 'resetPreferences'
+      | 'resetEverything'
+    > = []
+
+    if (resetBudget || resetEverything) {
+      actions.push('resetBudget')
+    } else {
+      if (clearBills) {
+        actions.push('clearBills')
+      }
+      if (clearGoals) {
+        actions.push('clearGoals')
+      }
+      if (clearSchedule) {
+        actions.push('clearSchedule')
+      }
+    }
+
+    if (resetPreferences) {
+      actions.push('resetPreferences')
+    }
+
+    if (resetEverything) {
+      actions.push('resetEverything')
+    } else if (clearLabels) {
+      actions.push('clearLabels')
+    }
+
+    return { actions }
+  }
+
   const handleSendChat = async () => {
-    if (!chatInput.trim()) return
+    const userMessage = chatInput.trim()
+    if (!userMessage) return
     const nextMessages = [
       ...chatMessages,
-      { role: 'user' as const, content: chatInput.trim() },
+      { role: 'user' as const, content: userMessage },
     ]
     setChatMessages(nextMessages)
     setChatInput('')
     setChatLoading(true)
+    const applyNow =
+      userMessage.toLowerCase() === 'apply' ||
+      userMessage.toLowerCase() === 'yes' ||
+      userMessage.toLowerCase() === 'confirm'
+
+    if (applyNow && (pendingLocalAction || pendingUpdates)) {
+      if (pendingLocalAction) {
+        applyLocalAction(pendingLocalAction)
+      } else if (pendingUpdates) {
+        applyBudgetUpdates(pendingUpdates)
+      }
+      setPendingUpdates(null)
+      setPendingLocalAction(null)
+      setPendingSummary('')
+      showToast('Changes applied.')
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: 'Changes applied. Want me to keep tuning the plan?',
+        },
+      ])
+      setChatLoading(false)
+      return
+    }
+
+    if (applyNow) {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Nothing to apply yet.' },
+      ])
+      setChatLoading(false)
+      return
+    }
+
     setPendingUpdates(null)
+    setPendingLocalAction(null)
     setPendingSummary('')
+
+    const localAction = getLocalCopilotAction(userMessage)
+    if (localAction) {
+      const describedActions = describeLocalActions(localAction)
+      setPendingLocalAction(localAction)
+      setPendingSummary(
+        `I can ${describedActions.join(', ')}. Click Apply changes to confirm.`
+      )
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            'I can do that. Say "apply" or click Apply changes when you are ready.',
+        },
+      ])
+      setChatLoading(false)
+      return
+    }
+
     const { data, error } = await supabase.functions.invoke('budget-coach', {
       body: {
         messages: nextMessages,
@@ -722,11 +1055,13 @@ function App() {
       return
     }
     const reply = data?.reply ?? 'I am ready to help.'
-    setChatMessages((prev) => [...prev, { role: 'assistant', content: reply }])
     const updates = data?.updates
     if (updates && typeof updates === 'object' && Object.keys(updates).length > 0) {
       setPendingUpdates(updates)
       setPendingSummary(data?.summary ?? 'Apply these suggested updates?')
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: reply }])
+    } else {
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: reply }])
     }
     setChatLoading(false)
   }
@@ -773,7 +1108,7 @@ function App() {
     rows.push(['Schedule'])
     rows.push(['Bill', 'Due date', 'Amount'])
     scheduledBills.forEach((bill) => {
-      rows.push([bill.name, bill.date, formatCurrency(bill.amount)])
+      rows.push([bill.name, formatBillDateLabel(bill), formatCurrency(bill.amount)])
     })
     rows.push([])
 
@@ -982,7 +1317,7 @@ function App() {
   const billWeekMap = budgetBills.map((bill, index) => ({
     ...bill,
     index,
-    week: billWeekIndex(bill.date),
+    week: billWeekIndex(bill.date, bill.recurringDay),
   }))
   const weeklyBillTotals = billWeekMap.reduce(
     (totals, bill) => {
@@ -1022,7 +1357,9 @@ function App() {
   const fallbackBillIndex = suggestedBillIndex >= 0 ? suggestedBillIndex : 0
   const suggestedBill = budgetBills[fallbackBillIndex]
   const suggestedBillName = suggestedBill?.name ?? 'a monthly bill'
-  const canApplySuggestion = Boolean(suggestedBill)
+  const canApplySuggestion = Boolean(
+    suggestedBill && (suggestedBill.recurringDay === null || suggestedBill.recurringDay === undefined)
+  )
   const trendSource = weeklyAmounts.slice(0, 3)
   const trendMax = Math.max(...trendSource.map((amount) => Math.abs(amount)), 1)
   const trendValues = trendSource.map((amount) => Math.abs(amount) / trendMax)
@@ -1092,7 +1429,7 @@ function App() {
           <li key={`cashflow-bill-${bill.name}`}>
             <span>{bill.name}</span>
             <span>
-              {bill.date} · {formatCurrency(bill.amount)}
+              {formatBillDateLabel(bill)} · {formatCurrency(bill.amount)}
             </span>
           </li>
         ))}
@@ -1662,20 +1999,63 @@ function App() {
                               (bill) =>
                                 bill.name.toLowerCase() === category.name.toLowerCase()
                             )
-                            const scheduledDate =
-                              billIndex >= 0 ? budgetBills[billIndex].date : ''
+                            const scheduledBill =
+                              billIndex >= 0 ? budgetBills[billIndex] : null
+                            const scheduledDate = scheduledBill?.date ?? ''
+                            const recurringDay = scheduledBill?.recurringDay ?? null
+                            const inferredDay =
+                              recurringDay ?? extractDayFromLabel(scheduledDate) ?? 1
+                            const isRecurring = recurringDay !== null
                             return (
-                              <input
-                                type="date"
-                                value={formatDateForInput(scheduledDate)}
-                                onChange={(event) =>
-                                  handleScheduleBill(
-                                    category.name,
-                                    event.target.value,
-                                    category.planned
-                                  )
-                                }
-                              />
+                              <div className="recurring-fields">
+                                <label className="toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={isRecurring}
+                                    onChange={(event) =>
+                                      handleScheduleBill(
+                                        category.name,
+                                        scheduledDate,
+                                        category.planned,
+                                        event.target.checked ? inferredDay : null
+                                      )
+                                    }
+                                  />
+                                  <span>Repeats monthly</span>
+                                </label>
+                                {isRecurring ? (
+                                  <label className="input-row">
+                                    Day of month
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="31"
+                                      value={inferredDay}
+                                      onChange={(event) =>
+                                        handleScheduleBill(
+                                          category.name,
+                                          scheduledDate,
+                                          category.planned,
+                                          Number(event.target.value || 1)
+                                        )
+                                      }
+                                    />
+                                  </label>
+                                ) : (
+                                  <input
+                                    type="date"
+                                    value={formatDateForInput(scheduledDate)}
+                                    onChange={(event) =>
+                                      handleScheduleBill(
+                                        category.name,
+                                        event.target.value,
+                                        category.planned,
+                                        null
+                                      )
+                                    }
+                                  />
+                                )}
+                              </div>
                             )
                           })()}
                           <div className="inline-actions">
@@ -2113,7 +2493,7 @@ function App() {
                   <li key={bill.name}>
                     <span>{bill.name}</span>
                     <strong>{formatCurrency(bill.amount)}</strong>
-                    <em>{bill.date}</em>
+                    <em>{formatBillDateLabel(bill)}</em>
                   </li>
                 ))}
               </ul>
@@ -2205,8 +2585,8 @@ function App() {
             <div>
               <h2>Budget Copilot</h2>
               <p>
-                Ask for simple changes or explanations. Nothing changes until you
-                confirm it.
+                Tell me what to change. I will suggest edits and only apply them
+                after you say \"apply\".
               </p>
             </div>
             <span className="tag">Powered by Groq</span>
@@ -2223,20 +2603,18 @@ function App() {
                       {message.content}
                     </div>
                   ))
-                ) : (
-                  <p className="muted">
-                    Try: “Cut $150 from dining and boost savings by $100.”
-                  </p>
-                )}
+                ) : null}
                 {chatLoading ? (
-                  <div className="chat-bubble assistant">Thinking...</div>
+                  <div className="chat-bubble assistant">
+                    Drafting changes and next steps...
+                  </div>
                 ) : null}
               </div>
               <div className="chat-input">
                 <input
                   type="text"
                   value={chatInput}
-                  placeholder="Ask for a change or a quick check..."
+                  placeholder="Tell me what to change (say apply to confirm)."
                   onChange={(event) => setChatInput(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
@@ -2251,17 +2629,29 @@ function App() {
             </div>
             <div className="suggestion-card">
               <h3>Suggestions</h3>
-              {pendingUpdates ? (
+              {pendingUpdates || pendingLocalAction ? (
                 <>
                   <p>{pendingSummary}</p>
                   <div className="inline-actions">
                     <button
                       className="solid small"
                       onClick={() => {
-                        applyBudgetUpdates(pendingUpdates)
+                        if (pendingLocalAction) {
+                          applyLocalAction(pendingLocalAction)
+                        } else if (pendingUpdates) {
+                          applyBudgetUpdates(pendingUpdates)
+                        }
                         setPendingUpdates(null)
+                        setPendingLocalAction(null)
                         setPendingSummary('')
-                        showToast('Updates applied.')
+                        showToast('Changes applied.')
+                        setChatMessages((prev) => [
+                          ...prev,
+                          {
+                            role: 'assistant',
+                            content: 'Changes applied. Want me to adjust anything else?',
+                          },
+                        ])
                       }}
                     >
                       Apply changes
@@ -2270,6 +2660,7 @@ function App() {
                       className="ghost small"
                       onClick={() => {
                         setPendingUpdates(null)
+                        setPendingLocalAction(null)
                         setPendingSummary('')
                       }}
                     >
@@ -2279,7 +2670,7 @@ function App() {
                 </>
               ) : (
                 <p className="muted">
-                  Suggestions show up here. You decide what to apply.
+                  Suggestions land here. Nothing applies until you say \"apply\".
                 </p>
               )}
             </div>
@@ -2694,13 +3085,26 @@ function App() {
                         handleBillChange(index, 'name', event.target.value)
                       }
                     />
-                    <input
-                      type="text"
-                      value={bill.date}
-                      onChange={(event) =>
-                        handleBillChange(index, 'date', event.target.value)
-                      }
-                    />
+                    {bill.recurringDay !== null && bill.recurringDay !== undefined ? (
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={bill.recurringDay}
+                        placeholder="Day"
+                        onChange={(event) =>
+                          handleBillRecurringDayChange(index, event.target.value)
+                        }
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={bill.date}
+                        onChange={(event) =>
+                          handleBillChange(index, 'date', event.target.value)
+                        }
+                      />
+                    )}
                     <input
                       type="number"
                       value={bill.amount}
@@ -2708,6 +3112,18 @@ function App() {
                         handleBillChange(index, 'amount', event.target.value)
                       }
                     />
+                    <label className="toggle schedule-toggle">
+                      <input
+                        type="checkbox"
+                        checked={
+                          bill.recurringDay !== null && bill.recurringDay !== undefined
+                        }
+                        onChange={(event) =>
+                          handleBillRecurringToggle(index, event.target.checked)
+                        }
+                      />
+                      <span>Monthly</span>
+                    </label>
                     <button
                       className="danger small"
                       type="button"

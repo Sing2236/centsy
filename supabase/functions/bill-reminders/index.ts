@@ -5,6 +5,7 @@ type BudgetBill = {
   name: string
   date: string
   amount: number
+  recurringDay?: number | null
 }
 
 type BudgetStateRow = {
@@ -57,6 +58,37 @@ const parseDueDate = (label: string, reference: Date) => {
 
 const startOfUtcDay = (value: Date) =>
   new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()))
+
+const nextRecurringDate = (recurringDay: number, reference: Date) => {
+  const safeDay = Math.min(31, Math.max(1, recurringDay))
+  const year = reference.getUTCFullYear()
+  const month = reference.getUTCMonth()
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+  const day = Math.min(safeDay, daysInMonth)
+  let candidate = new Date(Date.UTC(year, month, day))
+  const startToday = startOfUtcDay(reference)
+  if (candidate < startToday) {
+    const nextMonth = month + 1
+    const nextYear = year + Math.floor(nextMonth / 12)
+    const resolvedMonth = nextMonth % 12
+    const nextMonthDays = new Date(
+      Date.UTC(nextYear, resolvedMonth + 1, 0),
+    ).getUTCDate()
+    const nextDay = Math.min(safeDay, nextMonthDays)
+    candidate = new Date(Date.UTC(nextYear, resolvedMonth, nextDay))
+  }
+  return candidate
+}
+
+const resolveDueDate = (bill: BudgetBill, reference: Date) => {
+  if (bill.recurringDay !== undefined && bill.recurringDay !== null) {
+    const recurring = Number(bill.recurringDay)
+    if (!Number.isNaN(recurring)) {
+      return nextRecurringDate(recurring, reference)
+    }
+  }
+  return parseDueDate(bill.date, reference)
+}
 
 const diffDays = (future: Date, today: Date) =>
   Math.round((future.getTime() - today.getTime()) / 86_400_000)
@@ -151,7 +183,7 @@ Deno.serve(async (req) => {
     const dueBills: Array<{ bill: BudgetBill; dueDate: Date }> = []
 
     for (const bill of bills) {
-      const dueDate = parseDueDate(bill.date, today)
+      const dueDate = resolveDueDate(bill, today)
       if (!dueDate) {
         skipped += 1
         if (debug) {
@@ -159,6 +191,7 @@ Deno.serve(async (req) => {
             user_id: row.user_id,
             bill: bill.name,
             date: bill.date,
+            recurringDay: bill.recurringDay ?? null,
             reason: "unparsed_date",
             leadDays,
           })
