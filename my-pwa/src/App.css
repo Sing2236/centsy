@@ -639,23 +639,17 @@ main {
 }
 
 .carousel-track {
-  display: flex;
-  gap: 0.9rem;
-  overflow-x: auto;
-  padding: 0.2rem 0.1rem 0.4rem;
-  scroll-snap-type: x mandatory;
+  display: grid;
+  gap: 0.8rem;
 }
 
 .carousel-card {
-  min-width: 220px;
-  flex: 0 0 240px;
   background: #f7f7fb;
   border-radius: 16px;
   padding: 0.9rem;
   border: 1px solid rgba(15, 23, 42, 0.08);
   display: grid;
   gap: 0.5rem;
-  scroll-snap-align: start;
 }
 
 .carousel-card h4 {
@@ -816,15 +810,6 @@ main {
 .cashflow-view {
   display: grid;
   gap: 2rem;
-}
-
-.cashflow-carousel-section {
-  display: grid;
-  gap: 1rem;
-  background: #fff;
-  border-radius: 22px;
-  padding: 1.5rem;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
 }
 
 .cashflow-grid {

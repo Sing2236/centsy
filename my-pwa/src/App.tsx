@@ -866,6 +866,11 @@ function App() {
   const bestWeekIndex = weeklyAmounts.indexOf(maxWeeklyAmount) + 1
   const tightWeekIndex = weeklyAmounts.indexOf(minWeeklyAmount) + 1
   const upcomingBills = budgetBills.slice(0, 4)
+  const suggestedBillIndex = budgetBills.findIndex((bill) => /phone/i.test(bill.name))
+  const fallbackBillIndex = suggestedBillIndex >= 0 ? suggestedBillIndex : 0
+  const suggestedBill = budgetBills[fallbackBillIndex]
+  const suggestedBillName = suggestedBill?.name ?? 'a bill'
+  const canApplySuggestion = Boolean(suggestedBill)
   const trendSource = weeklyAmounts.slice(0, 3)
   const trendMax = Math.max(...trendSource.map((amount) => Math.abs(amount)), 1)
   const trendValues = trendSource.map((amount) => Math.abs(amount) / trendMax)
@@ -952,8 +957,28 @@ function App() {
         <div className="carousel-card">
           <span className="tag">Recommended</span>
           <h4>Next best action</h4>
-          <p>Shift the Phone bill to Week {bestWeekIndex} to smooth dips.</p>
-          <button className="ghost small" type="button">
+          <p>
+            Shift {suggestedBillName} to Week {bestWeekIndex} to smooth dips.
+          </p>
+          <button
+            className="ghost small"
+            type="button"
+            disabled={!canApplySuggestion}
+            onClick={() => {
+              if (!suggestedBill) {
+                showToast('Add a bill to apply a suggestion.')
+                return
+              }
+              setBudgetBills((prev) =>
+                prev.map((bill, index) =>
+                  index === fallbackBillIndex
+                    ? { ...bill, date: `Week ${bestWeekIndex}` }
+                    : bill
+                )
+              )
+              showToast(`${suggestedBillName} moved to Week ${bestWeekIndex}.`)
+            }}
+          >
             Apply suggestion
           </button>
         </div>
@@ -1496,6 +1521,7 @@ function App() {
                 ))}
               </div>
               {cashflowTrendBox}
+              {cashflowCarousel}
               <div className="hint">
                 <p>Tip: move a bill or paycheck to smooth the dips.</p>
                 <button
@@ -1513,15 +1539,6 @@ function App() {
               </div>
             </div>
           </div>
-          <section className="cashflow-carousel-section">
-            <div className="section-head compact">
-              <div>
-                <h3>Cash flow highlights</h3>
-                <p>Swipe through insights, upcoming bills, and quick tweaks.</p>
-              </div>
-            </div>
-            {cashflowCarousel}
-          </section>
           </section>
         ) : null}
 
@@ -1595,6 +1612,7 @@ function App() {
                 ))}
               </div>
               {cashflowTrendBox}
+              {cashflowCarousel}
               <div className="cashflow-controls">
                 <label>
                   Shift schedule
