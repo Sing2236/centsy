@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
+import centsyLogo from './assets/centsy-logo.svg'
 
 type Stock = {
   symbol: string
@@ -75,6 +76,25 @@ const goalPace = (amount: number, target: number) => {
   return `${Math.min(100, Math.round((amount / target) * 100))}%`
 }
 
+const billWeekIndex = (dateLabel: string) => {
+  const weekMatch = dateLabel.match(/week\s*(\d+)/i)
+  if (weekMatch) {
+    const week = Math.min(4, Math.max(1, Number(weekMatch[1])))
+    return Number.isNaN(week) ? 1 : week
+  }
+  const dayMatch = dateLabel.match(/(\d{1,2})/)
+  if (dayMatch) {
+    const day = Number(dayMatch[1])
+    if (day <= 7) return 1
+    if (day <= 14) return 2
+    if (day <= 21) return 3
+    return 4
+  }
+  return 1
+}
+
+const weekLabel = (week: number) => `Week ${week}`
+
 function App() {
   const [budgetGenerated, setBudgetGenerated] = useState(false)
   const [toast, setToast] = useState('')
@@ -116,7 +136,6 @@ function App() {
     actual: '',
   })
   const [showLogin, setShowLogin] = useState(false)
-  const [showTour, setShowTour] = useState(false)
   const [investmentSaved, setInvestmentSaved] = useState(false)
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
@@ -141,8 +160,11 @@ function App() {
   )
   const [pendingSummary, setPendingSummary] = useState('')
   const [activeView, setActiveView] = useState<
-    'workspace' | 'planner' | 'invest' | 'copilot' | 'personalize'
+    'workspace' | 'cashflow' | 'planner' | 'invest' | 'copilot' | 'personalize'
   >('workspace')
+  const [categoryRange, setCategoryRange] = useState({ min: 0, max: 3000 })
+  const [billSliderValues, setBillSliderValues] = useState<number[]>([])
+  const currentYear = new Date().getFullYear()
 
   const builderRef = useRef<HTMLDivElement | null>(null)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
@@ -298,6 +320,18 @@ function App() {
     showToast(`${name} updated.`)
   }
 
+  const updateCategoryValue = (
+    name: string,
+    field: 'planned' | 'actual',
+    value: number
+  ) => {
+    setBudgetCategories((prev) =>
+      prev.map((category) =>
+        category.name === name ? { ...category, [field]: value } : category
+      )
+    )
+  }
+
   const handleAddGoal = () => {
     if (!newGoal.name.trim()) {
       showToast('Add a goal name first.')
@@ -431,6 +465,11 @@ function App() {
     )
   }
 
+  const getBillSliderValue = (index: number, fallback: number) => {
+    const current = billSliderValues[index]
+    return typeof current === 'number' ? current : fallback
+  }
+
   const handleAddLabel = () => {
     if (!newLabel.trim()) {
       showToast('Label name is required.')
@@ -542,6 +581,14 @@ function App() {
       setExpectedReturn(Number(updates.expectedReturn))
     }
   }
+
+  useEffect(() => {
+    setBillSliderValues((prev) =>
+      budgetBills.map((bill, index) =>
+        typeof prev[index] === 'number' ? prev[index] : bill.amount
+      )
+    )
+  }, [budgetBills])
 
   const handleSendChat = async () => {
     if (!chatInput.trim()) return
@@ -785,21 +832,143 @@ function App() {
         (index - scheduleBias + weeklyBaseWeights.length) % weeklyBaseWeights.length
       ]
   )
-  const weeklyAmounts = weeklyWeights.map((weight) => availableCash * weight)
-  const maxWeekly = Math.max(...weeklyAmounts, 1)
+  const billWeekMap = budgetBills.map((bill, index) => ({
+    ...bill,
+    index,
+    week: billWeekIndex(bill.date),
+  }))
+  const weeklyBillTotals = billWeekMap.reduce(
+    (totals, bill) => {
+      const weekIndex = bill.week - 1
+      totals[weekIndex] += bill.amount
+      return totals
+    },
+    [0, 0, 0, 0]
+  )
+  const weeklyCategorySpend = plannedCategoryTotal / weeklyBaseWeights.length
+  const weeklyInvestment = monthlyInvestment / weeklyBaseWeights.length
+  const weeklyAmounts = weeklyWeights.map(
+    (weight, index) =>
+      monthlyIncome * weight - weeklyCategorySpend - weeklyInvestment - weeklyBillTotals[index]
+  )
+  const maxWeekly = Math.max(...weeklyAmounts.map((amount) => Math.abs(amount)), 1)
+  const averageWeekly = weeklyAmounts.reduce((sum, amount) => sum + amount, 0) /
+    weeklyAmounts.length
+  const stressWeeks = weeklyAmounts
+    .map((amount, index) => ({
+      label: `Week ${index + 1}`,
+      amount,
+      isTight: amount < averageWeekly * 0.75,
+    }))
+    .filter((week) => week.isTight)
+  const maxWeeklyAmount = Math.max(...weeklyAmounts)
+  const minWeeklyAmount = Math.min(...weeklyAmounts)
+  const bestWeekIndex = weeklyAmounts.indexOf(maxWeeklyAmount) + 1
+  const tightWeekIndex = weeklyAmounts.indexOf(minWeeklyAmount) + 1
+  const upcomingBills = budgetBills.slice(0, 4)
+  const trendSource = weeklyAmounts.slice(0, 3)
+  const trendMax = Math.max(...trendSource.map((amount) => Math.abs(amount)), 1)
+  const trendValues = trendSource.map((amount) => Math.abs(amount) / trendMax)
+  const trendAverage =
+    trendSource.reduce((sum, amount) => sum + amount, 0) / trendSource.length
+  const trendMinAmount = Math.min(...trendSource)
+  const trendMaxAmount = Math.max(...trendSource)
   const payFrequencyLabel =
     payFrequency === 'weekly'
       ? 'Weekly'
       : payFrequency === 'monthly'
         ? 'Monthly'
         : 'Every 2 weeks'
+  const cashflowTrendBox = (
+    <div className="cashflow-trend">
+      <div>
+        <span className="tag">Trend view</span>
+        <h4>Next 3 weeks variance</h4>
+        <p>Higher bars = bigger weekly swings. Lower bars = steadier weeks.</p>
+      </div>
+      <div className="trend-chart">
+        <div className="trend-scale">
+          <span>High</span>
+          <span>Low</span>
+        </div>
+        <div className="trend-row">
+          {trendValues.map((value, index) => (
+            <span
+              key={`trend-${index}`}
+              style={{ height: `${Math.round(value * 48) + 12}px` }}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="trend-labels">
+        <span>Week 1</span>
+        <span>Week 2</span>
+        <span>Week 3</span>
+      </div>
+      <div className="carousel-meta">
+        <span>Avg: {formatCurrency(trendAverage)}</span>
+        <span>
+          Range: {formatCurrency(trendMinAmount)}-{formatCurrency(trendMaxAmount)}
+        </span>
+      </div>
+    </div>
+  )
+
+  const cashflowCarousel = (
+    <div className="cashflow-carousel" aria-label="Cash flow highlights">
+      <div className="carousel-track">
+        <div className="carousel-card">
+          <span className="tag">Weekly insights</span>
+          <h4>Best week to schedule bills</h4>
+          <p>
+            Week {bestWeekIndex} has the strongest cushion at{' '}
+            {formatCurrency(maxWeeklyAmount)}.
+          </p>
+          <div className="carousel-meta">
+            <span>Lowest: Week {tightWeekIndex}</span>
+            <span>Avg: {formatCurrency(averageWeekly)}</span>
+          </div>
+        </div>
+        <div className="carousel-card">
+          <span className="tag">Upcoming bills</span>
+          <h4>Next on the calendar</h4>
+          <ul className="mini-list">
+            {upcomingBills.map((bill) => (
+              <li key={`cashflow-bill-${bill.name}`}>
+                <span>{bill.name}</span>
+                <span>
+                  {bill.date} · {formatCurrency(bill.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="carousel-card">
+          <span className="tag">What-if shifts</span>
+          <h4>Try quick schedule tweaks</h4>
+          <p>Move one bill by +1 week to ease Week {tightWeekIndex}.</p>
+          <p>Trim a flexible category by $30 to lift the lowest week.</p>
+        </div>
+        <div className="carousel-card">
+          <span className="tag">Recommended</span>
+          <h4>Next best action</h4>
+          <p>Shift the Phone bill to Week {bestWeekIndex} to smooth dips.</p>
+          <button className="ghost small" type="button">
+            Apply suggestion
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="app">
       <header className="hero">
         <nav className="topbar">
           <div className="brand">
-            <span className="brand-mark">CE</span>
+            <span className="brand-mark">
+              <img className="brand-logo" src={centsyLogo} alt="Centsy logo" />
+            </span>
             <div>
               <p className="brand-name">Centsy</p>
               <p className="brand-tag">Budgeting for real life</p>
@@ -850,12 +1019,6 @@ function App() {
               >
                 Start your budget
               </button>
-              <button
-                className="ghost"
-                onClick={() => setShowTour((prev) => !prev)}
-              >
-                Watch the 2-min tour
-              </button>
             </div>
             <div className="stat-row">
               <div>
@@ -871,25 +1034,6 @@ function App() {
                 <span>customizable</span>
               </div>
             </div>
-            {showTour ? (
-              <div className="tour-card">
-                <div className="card-head">
-                  <h3>2-minute tour</h3>
-                  <button
-                    className="ghost small"
-                    onClick={() => setShowTour(false)}
-                  >
-                    Close
-                  </button>
-                </div>
-                <ol>
-                  <li>Enter income and pay cadence.</li>
-                  <li>Auto-fill categories and goals.</li>
-                  <li>Adjust bills and cash flow.</li>
-                  <li>Track savings + investing impact.</li>
-                </ol>
-              </div>
-            ) : null}
           </div>
 
           <div className="hero-panel" ref={builderRef}>
@@ -1021,6 +1165,12 @@ function App() {
               Budget
             </button>
             <button
+              className={activeView === 'cashflow' ? 'tab active' : 'tab'}
+              onClick={() => setActiveView('cashflow')}
+            >
+              Cash flow
+            </button>
+            <button
               className={activeView === 'planner' ? 'tab active' : 'tab'}
               onClick={() => setActiveView('planner')}
             >
@@ -1127,7 +1277,7 @@ function App() {
           </div>
 
           <div className="budget-grid">
-            <div className="budget-card">
+            <div className="budget-card cashflow-card">
               <div className="card-head">
                 <h3>Categories</h3>
                 <button
@@ -1136,6 +1286,38 @@ function App() {
                 >
                   Add category
                 </button>
+              </div>
+              <div className="category-range">
+                <label>
+                  Min $
+                  <input
+                    type="number"
+                    min="0"
+                    value={categoryRange.min}
+                    onChange={(event) => {
+                      const nextMin = Math.max(0, Number(event.target.value || 0))
+                      setCategoryRange((prev) => ({
+                        min: nextMin,
+                        max: nextMin >= prev.max ? nextMin + 100 : prev.max,
+                      }))
+                    }}
+                  />
+                </label>
+                <label>
+                  Max $
+                  <input
+                    type="number"
+                    min={categoryRange.min + 1}
+                    value={categoryRange.max}
+                    onChange={(event) => {
+                      const nextMax = Number(event.target.value || 0)
+                      setCategoryRange((prev) => ({
+                        min: nextMax <= prev.min ? Math.max(0, nextMax - 100) : prev.min,
+                        max: Math.max(prev.min + 1, nextMax),
+                      }))
+                    }}
+                  />
+                </label>
               </div>
               {showCategoryForm ? (
                 <div className="inline-form">
@@ -1185,6 +1367,11 @@ function App() {
                   </div>
                 </div>
               ) : null}
+              <div className="category-header">
+                <span>Category</span>
+                <span>Planned</span>
+                <span>Status</span>
+              </div>
               <div className="category-table">
                 {budgetCategories.map((category) => {
                   const status = statusFor(category.planned, category.actual)
@@ -1247,6 +1434,42 @@ function App() {
                           </button>
                         </>
                       )}
+                      <div className="category-sliders">
+                        <label>
+                          Planned
+                          <input
+                            type="range"
+                            min={categoryRange.min}
+                            max={categoryRange.max}
+                            step="5"
+                            value={category.planned}
+                            onChange={(event) =>
+                              updateCategoryValue(
+                                category.name,
+                                'planned',
+                                Number(event.target.value || 0)
+                              )
+                            }
+                          />
+                        </label>
+                        <label>
+                          Actual
+                          <input
+                            type="range"
+                            min={categoryRange.min}
+                            max={categoryRange.max}
+                            step="5"
+                            value={category.actual}
+                            onChange={(event) =>
+                              updateCategoryValue(
+                                category.name,
+                                'actual',
+                                Number(event.target.value || 0)
+                              )
+                            }
+                          />
+                        </label>
+                      </div>
                     </div>
                   )
                 })}
@@ -1272,6 +1495,7 @@ function App() {
                   </div>
                 ))}
               </div>
+              {cashflowTrendBox}
               <div className="hint">
                 <p>Tip: move a bill or paycheck to smooth the dips.</p>
                 <button
@@ -1286,6 +1510,242 @@ function App() {
                 >
                   Adjust schedule
                 </button>
+              </div>
+            </div>
+          </div>
+          <section className="cashflow-carousel-section">
+            <div className="section-head compact">
+              <div>
+                <h3>Cash flow highlights</h3>
+                <p>Swipe through insights, upcoming bills, and quick tweaks.</p>
+              </div>
+            </div>
+            {cashflowCarousel}
+          </section>
+          </section>
+        ) : null}
+
+        {activeView === 'cashflow' ? (
+          <section className="cashflow-view">
+          <div className="section-head">
+            <div>
+              <h2>Cash flow first budgeting</h2>
+              <p>Spot tight weeks early and smooth your month before it starts.</p>
+            </div>
+            <button
+              className="ghost"
+              onClick={() => {
+                scrollTo(plannerRef)
+                setActivePanel('schedule')
+                showToast('Adjust bill timing to smooth cash flow.')
+              }}
+            >
+              Adjust bill timing
+            </button>
+          </div>
+          <div className="summary-grid">
+            <div className="summary-card">
+              <span>Monthly income</span>
+              <strong>{formatCurrency(monthlyIncome)}</strong>
+              <small>
+                {payFrequencyLabel} pay x{multiplier}
+              </small>
+            </div>
+            <div className="summary-card">
+              <span>Planned bills</span>
+              <strong>{formatCurrency(plannedBillsTotal)}</strong>
+              <small>{budgetBills.length} upcoming bills</small>
+            </div>
+            <div className="summary-card">
+              <span>Planned categories</span>
+              <strong>{formatCurrency(plannedCategoryTotal)}</strong>
+              <small>{budgetCategories.length} categories</small>
+            </div>
+            <div
+              className={`summary-card highlight ${leftToBudget < 0 ? 'negative' : ''}`}
+            >
+              <span>Left to budget</span>
+              <strong>{formatCurrency(leftToBudget)}</strong>
+              <small>
+                {leftToBudget < 0
+                  ? 'Over budget this month'
+                  : 'Assignable to categories'}
+              </small>
+            </div>
+          </div>
+          <div className="cashflow-grid">
+            <div className="cashflow-panel">
+              <div className="card-head">
+                <h3>Weekly cash flow</h3>
+                <span className="tag">Next 4 weeks</span>
+              </div>
+              <div className="cashflow">
+                {weeklyAmounts.map((amount, index) => (
+                  <div className="flow-row" key={`cashflow-week-${index}`}>
+                    <span>Week {index + 1}</span>
+                    <div className={`flow-bar ${amount < 0 ? 'negative' : ''}`}>
+                      <span
+                        style={{
+                          width: `${Math.max((Math.abs(amount) / maxWeekly) * 100, 8)}%`,
+                        }}
+                      />
+                    </div>
+                    <strong>{formatCurrency(amount)}</strong>
+                  </div>
+                ))}
+              </div>
+              {cashflowTrendBox}
+              <div className="cashflow-controls">
+                <label>
+                  Shift schedule
+                  <input
+                    type="range"
+                    min="0"
+                    max="3"
+                    value={scheduleBias}
+                    onChange={(event) =>
+                      setScheduleBias(Number(event.target.value || 0))
+                    }
+                  />
+                </label>
+                <div className="range-labels">
+                  <span>Even</span>
+                  <span>Front</span>
+                  <span>Mid</span>
+                  <span>End</span>
+                </div>
+              </div>
+            </div>
+            <div className="cashflow-panel">
+              <div className="card-head">
+                <h3>Cash flow health</h3>
+                <span className="tag">At a glance</span>
+              </div>
+              <div className="health-list">
+                <div className="health-row">
+                  <span>Average weekly cash</span>
+                  <strong>{formatCurrency(averageWeekly)}</strong>
+                </div>
+                <div className="health-row">
+                  <span>Lowest week</span>
+                  <strong>{formatCurrency(Math.min(...weeklyAmounts))}</strong>
+                </div>
+                <div className="health-row">
+                  <span>Tight weeks</span>
+                  <strong>{stressWeeks.length}</strong>
+                </div>
+              </div>
+              <div className="stress-note">
+                {stressWeeks.length ? (
+                  <p>
+                    Tight in {stressWeeks.map((week) => week.label).join(', ')}.
+                    Consider shifting bills or trimming one category.
+                  </p>
+                ) : (
+                  <p>You have a smooth month with no cash flow dips flagged.</p>
+                )}
+              </div>
+              <button
+                className="solid small"
+                onClick={() => {
+                  setActivePanel('schedule')
+                  scrollTo(plannerRef)
+                  showToast('Schedule editor opened.')
+                }}
+              >
+                Smooth this month
+              </button>
+            </div>
+          </div>
+          <div className="cashflow-panel">
+            <div className="card-head">
+              <h3>Bill shift simulator</h3>
+              <span className="tag">Drag to move</span>
+            </div>
+            <div className="bill-shift-list">
+              {billWeekMap.map((bill) => (
+                <div className="bill-shift-row" key={`${bill.name}-${bill.index}`}>
+                  <div>
+                    <p>{bill.name}</p>
+                    <span>{bill.date}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="4"
+                    value={bill.week}
+                    onChange={(event) =>
+                      handleBillChange(
+                        bill.index,
+                        'date',
+                        weekLabel(Number(event.target.value || 1))
+                      )
+                    }
+                  />
+                  <div className="bill-shift-input">
+                    <input
+                      type="number"
+                      value={getBillSliderValue(bill.index, bill.amount)}
+                      onChange={(event) => {
+                        const nextValue = Number(event.target.value || 0)
+                        setBillSliderValues((prev) => {
+                          const next = [...prev]
+                          next[bill.index] = nextValue
+                          return next
+                        })
+                        handleBillChange(bill.index, 'amount', String(nextValue))
+                      }}
+                    />
+                    <span>{formatCurrency(bill.amount)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="muted">Moving a bill updates the weekly cash flow above.</p>
+          </div>
+          <div className="cashflow-help">
+            <div className="card-head">
+              <h3>How to read this view</h3>
+              <span className="tag">Cash flow basics</span>
+            </div>
+            <div className="help-grid">
+              <div>
+                <h4>Weekly cash flow</h4>
+                <p>
+                  Each bar shows how much cash you have left that week after
+                  planned bills and categories. Longer bars mean more breathing
+                  room; shorter bars mean tighter weeks.
+                </p>
+              </div>
+              <div>
+                <h4>Shift schedule</h4>
+                <p>
+                  This slider simulates moving bill timing earlier or later in the
+                  month. “Even” spreads cash evenly, while “Front” or “End” shifts
+                  cash toward the start or end of the month.
+                </p>
+              </div>
+              <div>
+                <h4>Bill shift simulator</h4>
+                <p>
+                  Slide each bill between weeks to see how timing changes your cash
+                  flow. Adjust the dollar amount to see immediate impact.
+                </p>
+              </div>
+              <div>
+                <h4>Cash flow health</h4>
+                <p>
+                  Average weekly cash is your typical weekly balance. Lowest week
+                  highlights your tightest week. Tight weeks are flagged when they
+                  fall well below average.
+                </p>
+              </div>
+              <div>
+                <h4>Smooth this month</h4>
+                <p>
+                  Jump to the bill schedule editor to shift bill dates and even out
+                  cash flow dips.
+                </p>
               </div>
             </div>
           </div>
@@ -1722,6 +2182,9 @@ function App() {
           </div>
         </section>
       </main>
+      <footer className="site-footer">
+        <p>© {currentYear} Centsy. All rights reserved.</p>
+      </footer>
 
       {activePanel ? (
         <div className="action-panel">
