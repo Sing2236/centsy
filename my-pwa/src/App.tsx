@@ -36,6 +36,15 @@ type BudgetBill = {
   recurringDay: number | null
 }
 
+type SpendEntry = {
+  id: string
+  merchant: string
+  category: string
+  amount: number
+  date: string
+  note: string
+}
+
 type BudgetState = {
   incomePerPaycheck: number
   partnerIncome: number
@@ -60,6 +69,7 @@ type BudgetState = {
   robinhoodConnected: boolean
   monthlyInvestment: number
   expectedReturn: number
+  spendEntries: SpendEntry[]
 }
 
 const categoriesSeed = [
@@ -83,6 +93,10 @@ const billsSeed: BudgetBill[] = [
   { name: 'Car insurance', date: 'Mar 12', amount: 165, recurringDay: null },
   { name: 'Streaming bundle', date: 'Mar 19', amount: 24, recurringDay: null },
 ]
+
+const spendStepOptions = [-5, -1, 1, 5]
+
+const spendEntriesSeed: SpendEntry[] = []
 
 const formatCurrency = (value: number) => {
   const rounded = Math.round(value)
@@ -199,6 +213,15 @@ function App() {
   const [stocks, setStocks] = useState<Stock[]>([])
   const [expectedReturn, setExpectedReturn] = useState(7)
   const [monthlyInvestment, setMonthlyInvestment] = useState(200)
+  const [spendEntries, setSpendEntries] = useState<SpendEntry[]>(spendEntriesSeed)
+  const [newSpend, setNewSpend] = useState({
+    merchant: '',
+    amount: '',
+    category: '',
+    date: new Date().toISOString().slice(0, 10),
+    note: '',
+    direction: 'expense' as 'expense' | 'refund',
+  })
   const [incomePerPaycheck, setIncomePerPaycheck] = useState(2100)
   const [partnerIncome, setPartnerIncome] = useState(0)
   const [payFrequency, setPayFrequency] = useState('biweekly')
@@ -279,6 +302,7 @@ function App() {
   const [activeView, setActiveView] = useState<
     | 'workspace'
     | 'cashflow'
+    | 'spend'
     | 'planner'
     | 'invest'
     | 'copilot'
@@ -328,6 +352,12 @@ function App() {
     }
   }, [isCommunityPage, userId])
 
+  useEffect(() => {
+    if (!newSpend.category && budgetCategories.length > 0) {
+      setNewSpend((prev) => ({ ...prev, category: budgetCategories[0].name }))
+    }
+  }, [budgetCategories, newSpend.category])
+
   const currentBudgetState = useMemo<BudgetState>(
     () => ({
       incomePerPaycheck,
@@ -353,6 +383,7 @@ function App() {
       robinhoodConnected,
       monthlyInvestment,
       expectedReturn,
+      spendEntries,
     }),
     [
       incomePerPaycheck,
@@ -378,6 +409,7 @@ function App() {
       robinhoodConnected,
       monthlyInvestment,
       expectedReturn,
+      spendEntries,
     ]
   )
 
@@ -496,6 +528,82 @@ function App() {
         category.name === name ? { ...category, [field]: value } : category
       )
     )
+  }
+
+  const adjustCategoryActual = (name: string, delta: number) => {
+    if (!delta || Number.isNaN(delta)) return
+    setBudgetCategories((prev) =>
+      prev.map((category) =>
+        category.name === name
+          ? { ...category, actual: category.actual + delta }
+          : category
+      )
+    )
+  }
+
+  const createSpendId = () => {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return crypto.randomUUID()
+    }
+    return `spend-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
+
+  const handleAddSpendEntry = () => {
+    if (!newSpend.merchant.trim()) {
+      showToast('Add a merchant or item first.')
+      return
+    }
+    const amountValue = Number(newSpend.amount || 0)
+    if (!amountValue || amountValue <= 0) {
+      showToast('Enter a valid amount.')
+      return
+    }
+    if (!newSpend.category) {
+      showToast('Select a bill to track.')
+      return
+    }
+    const signedAmount =
+      newSpend.direction === 'refund' ? -Math.abs(amountValue) : Math.abs(amountValue)
+    const entry: SpendEntry = {
+      id: createSpendId(),
+      merchant: newSpend.merchant.trim(),
+      category: newSpend.category,
+      amount: signedAmount,
+      date: newSpend.date || new Date().toISOString().slice(0, 10),
+      note: newSpend.note.trim(),
+    }
+    setSpendEntries((prev) => [entry, ...prev])
+    adjustCategoryActual(entry.category, entry.amount)
+    setNewSpend((prev) => ({
+      ...prev,
+      merchant: '',
+      amount: '',
+      note: '',
+      direction: 'expense',
+    }))
+    showToast('Spend logged.')
+  }
+
+  const handleAdjustSpendEntry = (entryId: string, delta: number) => {
+    if (!delta || Number.isNaN(delta)) return
+    setSpendEntries((prev) => {
+      const target = prev.find((entry) => entry.id === entryId)
+      if (!target) return prev
+      adjustCategoryActual(target.category, delta)
+      return prev.map((entry) =>
+        entry.id === entryId ? { ...entry, amount: entry.amount + delta } : entry
+      )
+    })
+  }
+
+  const handleDeleteSpendEntry = (entryId: string) => {
+    setSpendEntries((prev) => {
+      const target = prev.find((entry) => entry.id === entryId)
+      if (!target) return prev
+      adjustCategoryActual(target.category, -target.amount)
+      return prev.filter((entry) => entry.id !== entryId)
+    })
+    showToast('Spend removed.')
   }
 
   const handleEditGoal = (name: string) => {
@@ -619,6 +727,32 @@ function App() {
     await supabase.auth.signOut()
     setSaveState('idle')
     showToast('Logged out.')
+  }
+
+  const handleManualPreferencesSave = async () => {
+    if (!requireLogin('Please log in to save your preferences.')) {
+      return
+    }
+    if (!userId) {
+      showToast('Missing account session.')
+      return
+    }
+    setSaveState('saving')
+    const { error } = await supabase.from('budget_state').upsert(
+      {
+        user_id: userId,
+        data: currentBudgetState,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' }
+    )
+    if (error) {
+      setSaveState('idle')
+      showToast('Save failed. Check connection.')
+      return
+    }
+    setSaveState('saved')
+    showToast('Preferences saved.')
   }
 
   const handleBillChange = (
@@ -916,6 +1050,24 @@ function App() {
         price: Number(item.price ?? 0),
         monthly: Number(item.monthly ?? 0),
       }))
+    const normalizeSpendEntries = (
+      items: Array<{
+        id: string
+        merchant: string
+        category: string
+        amount: number | string
+        date: string
+        note?: string
+      }>
+    ) =>
+      items.map((item) => ({
+        id: item.id || createSpendId(),
+        merchant: item.merchant ?? '',
+        category: item.category ?? '',
+        amount: Number(item.amount ?? 0),
+        date: item.date ?? '',
+        note: item.note ?? '',
+      }))
 
     if ('incomePerPaycheck' in updates && updates.incomePerPaycheck !== undefined) {
       setIncomePerPaycheck(Number(updates.incomePerPaycheck))
@@ -1010,6 +1162,9 @@ function App() {
     if ('expectedReturn' in updates && updates.expectedReturn !== undefined) {
       setExpectedReturn(Number(updates.expectedReturn))
     }
+    if ('spendEntries' in updates && Array.isArray(updates.spendEntries)) {
+      setSpendEntries(normalizeSpendEntries(updates.spendEntries))
+    }
   }
 
   const applyLocalAction = (action: {
@@ -1036,11 +1191,13 @@ function App() {
       setBudgetCategories(categoriesSeed)
       setBudgetGoals(goalsSeed)
       setBudgetBills(billsSeed)
+      setSpendEntries([])
       setBudgetGenerated(true)
     } else {
       if (clearBills) {
         setBudgetCategories([])
         setBudgetBills([])
+        setSpendEntries([])
       }
       if (clearGoals) {
         setBudgetGoals([])
@@ -1483,6 +1640,19 @@ function App() {
     })
     rows.push([])
 
+    rows.push(['Spending log'])
+    rows.push(['Date', 'Merchant', 'Bill', 'Amount', 'Note'])
+    spendEntries.forEach((entry) => {
+      rows.push([
+        entry.date,
+        entry.merchant,
+        entry.category,
+        formatCurrency(entry.amount),
+        entry.note,
+      ])
+    })
+    rows.push([])
+
     rows.push(['Schedule'])
     rows.push(['Bill', 'Due date', 'Amount'])
     scheduledBills.forEach((bill) => {
@@ -1593,6 +1763,7 @@ function App() {
         setRobinhoodConnected(saved.robinhoodConnected ?? false)
         setMonthlyInvestment(saved.monthlyInvestment ?? 200)
         setExpectedReturn(saved.expectedReturn ?? 7)
+        setSpendEntries(saved.spendEntries ?? spendEntriesSeed)
         setSaveState('saved')
       }
       setIsHydrating(false)
@@ -1664,6 +1835,32 @@ function App() {
   )
   const plannedBillsDisplayTotal = monthlyBillsTotal
   const plannedBillsDisplayCount = budgetCategories.length
+  const totalPlannedSpend = monthlyBillsTotal
+  const spendEntriesTotal = spendEntries.reduce(
+    (sum, entry) => sum + entry.amount,
+    0
+  )
+  const remainingSpend = totalPlannedSpend - spendEntriesTotal
+  const spendVariance = spendEntriesTotal - totalPlannedSpend
+  const spendEntriesByCategory = spendEntries.reduce((map, entry) => {
+    const key = entry.category.toLowerCase()
+    map.set(key, (map.get(key) ?? 0) + entry.amount)
+    return map
+  }, new Map<string, number>())
+  const spendCategoryRows = budgetCategories.map((category) => {
+    const logged = spendEntriesByCategory.get(category.name.toLowerCase()) ?? 0
+    return {
+      name: category.name,
+      planned: category.planned,
+      actual: category.actual,
+      logged,
+      remaining: category.planned - category.actual,
+      status: statusFor(category.planned, category.actual),
+    }
+  })
+  const spendEntriesSorted = [...spendEntries].sort((a, b) =>
+    b.date.localeCompare(a.date)
+  )
   const scheduledBills =
     budgetBills.length > 0
       ? budgetBills
@@ -2439,6 +2636,12 @@ function App() {
               Cash flow
             </button>
             <button
+              className={activeView === 'spend' ? 'tab active' : 'tab'}
+              onClick={() => setActiveView('spend')}
+            >
+              Spending
+            </button>
+            <button
               className={activeView === 'planner' ? 'tab active' : 'tab'}
               onClick={() => setActiveView('planner')}
             >
@@ -2974,6 +3177,225 @@ function App() {
             </div>
             {cashflowCarousel}
           </section>
+          </section>
+        ) : null}
+
+        {activeView === 'spend' ? (
+          <section className="spend-view">
+          <div className="section-head">
+            <div>
+              <h2>Spending tracker</h2>
+              <p>Log each purchase and see how it rolls up into your bills.</p>
+            </div>
+            <button
+              className="ghost"
+              onClick={() => {
+                setActivePanel('schedule')
+                showToast('Review your bill schedule.')
+              }}
+            >
+              Review bill schedule
+            </button>
+          </div>
+          <div className="summary-grid">
+            <div className="summary-card">
+              <span>Planned spending</span>
+              <strong>{formatCurrency(totalPlannedSpend)}</strong>
+              <small>{spendCategoryRows.length} tracked bills</small>
+            </div>
+            <div className="summary-card">
+              <span>Logged spending</span>
+              <strong>{formatCurrency(spendEntriesTotal)}</strong>
+              <small>{spendEntries.length} entries</small>
+            </div>
+            <div className="summary-card">
+              <span>Remaining</span>
+              <strong>{formatCurrency(remainingSpend)}</strong>
+              <small>Left before plan</small>
+            </div>
+            <div
+              className={`summary-card highlight ${spendVariance > 0 ? 'negative' : ''}`}
+            >
+              <span>Variance</span>
+              <strong>{formatCurrency(spendVariance)}</strong>
+              <small>{spendVariance > 0 ? 'Over plan' : 'Under plan'}</small>
+            </div>
+          </div>
+          <div className="spend-grid">
+            <div className="spend-card">
+              <div className="card-head">
+                <h3>Log a purchase</h3>
+                <span className="tag">Daily spend</span>
+              </div>
+              <div className="spend-form">
+                <label>
+                  Merchant or item
+                  <input
+                    type="text"
+                    placeholder="Snacks, coffee, fuel"
+                    value={newSpend.merchant}
+                    onChange={(event) =>
+                      setNewSpend((prev) => ({ ...prev, merchant: event.target.value }))
+                    }
+                  />
+                </label>
+                <div className="spend-form-row">
+                  <label>
+                    Amount
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={newSpend.amount}
+                      onChange={(event) =>
+                        setNewSpend((prev) => ({ ...prev, amount: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Date
+                    <input
+                      type="date"
+                      value={newSpend.date}
+                      onChange={(event) =>
+                        setNewSpend((prev) => ({ ...prev, date: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Bill
+                    <select
+                      value={newSpend.category}
+                      onChange={(event) =>
+                        setNewSpend((prev) => ({ ...prev, category: event.target.value }))
+                      }
+                    >
+                      {budgetCategories.length ? (
+                        budgetCategories.map((category) => (
+                          <option key={`spend-${category.name}`} value={category.name}>
+                            {category.name}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">Add a bill first</option>
+                      )}
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  Note (optional)
+                  <input
+                    type="text"
+                    placeholder="Late-night snack run"
+                    value={newSpend.note}
+                    onChange={(event) =>
+                      setNewSpend((prev) => ({ ...prev, note: event.target.value }))
+                    }
+                  />
+                </label>
+                <div className="spend-toggle">
+                  <button
+                    className={newSpend.direction === 'expense' ? 'solid small' : 'ghost small'}
+                    type="button"
+                    onClick={() =>
+                      setNewSpend((prev) => ({ ...prev, direction: 'expense' }))
+                    }
+                  >
+                    Expense
+                  </button>
+                  <button
+                    className={newSpend.direction === 'refund' ? 'solid small' : 'ghost small'}
+                    type="button"
+                    onClick={() =>
+                      setNewSpend((prev) => ({ ...prev, direction: 'refund' }))
+                    }
+                  >
+                    Refund
+                  </button>
+                </div>
+                <button className="solid" onClick={handleAddSpendEntry}>
+                  Add spend
+                </button>
+              </div>
+              <div className="spend-log">
+                <div className="card-head">
+                  <h4>Recent spends</h4>
+                  <span className="tag">Editable</span>
+                </div>
+                {spendEntriesSorted.length ? (
+                  <ul className="spend-log-list">
+                    {spendEntriesSorted.map((entry) => (
+                      <li className="spend-log-row" key={entry.id}>
+                        <div className="spend-log-main">
+                          <strong>{entry.merchant}</strong>
+                          <span>
+                            {entry.category} • {formatShortDate(entry.date)}
+                          </span>
+                          {entry.note ? <em>{entry.note}</em> : null}
+                        </div>
+                        <div
+                          className={`spend-log-amount ${entry.amount < 0 ? 'negative' : ''}`}
+                        >
+                          {formatCurrency(entry.amount)}
+                        </div>
+                        <div className="spend-log-actions">
+                          <div className="spend-steps">
+                            {spendStepOptions.map((step) => (
+                              <button
+                                className="ghost small"
+                                key={`${entry.id}-${step}`}
+                                type="button"
+                                onClick={() => handleAdjustSpendEntry(entry.id, step)}
+                              >
+                                {step > 0 ? `+${formatCurrency(step)}` : formatCurrency(step)}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            className="danger small"
+                            type="button"
+                            onClick={() => handleDeleteSpendEntry(entry.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">
+                    No spends logged yet. Add your first snack run or coffee.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="spend-card">
+              <div className="card-head">
+                <h3>Bill rollup</h3>
+                <span className="tag">Budget view</span>
+              </div>
+              <div className="spend-rollup">
+                {spendCategoryRows.map((row) => (
+                  <div className={`spend-rollup-row ${row.status}`} key={row.name}>
+                    <div>
+                      <strong>{row.name}</strong>
+                      <span>
+                        Planned {formatCurrency(row.planned)} • Logged{' '}
+                        {formatCurrency(row.logged)}
+                      </span>
+                    </div>
+                    <div
+                      className={`spend-rollup-remaining ${
+                        row.remaining < 0 ? 'negative' : ''
+                      }`}
+                    >
+                      {formatCurrency(row.remaining)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
           </section>
         ) : null}
 
@@ -3569,6 +3991,11 @@ function App() {
                 </button>
               </div>
             </div>
+          </div>
+          <div className="preferences-actions">
+            <button className="solid" onClick={handleManualPreferencesSave}>
+              Save preferences
+            </button>
           </div>
           </section>
         ) : null}
