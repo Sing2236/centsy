@@ -997,7 +997,7 @@ function App() {
       const formatted = (data ?? []).map((item) => ({
         ...item,
         tags: Array.isArray(item.tags)
-          ? item.tags.map((tag) => String(tag).toLowerCase())
+          ? item.tags.map((tag: string) => String(tag).toLowerCase())
           : [],
         category: ensureCategory(item.category),
       }))
