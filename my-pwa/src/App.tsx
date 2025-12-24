@@ -2542,11 +2542,11 @@ function App() {
                       </div>
                       {post.tags.length ? (
                         <div className="tag-row">
-                          {post.tags.map((tag) => (
-                            <span className="tag-pill" key={`${post.id}-${tag}`}>
-                              {tag}
-                            </span>
-                          ))}
+                  {post.tags.map((tag: string) => (
+                    <span className="tag-pill" key={`${post.id}-${tag}`}>
+                      {tag}
+                    </span>
+                  ))}
                         </div>
                       ) : null}
                       <button
