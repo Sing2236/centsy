@@ -72,6 +72,8 @@ type BudgetState = {
   spendEntries: SpendEntry[]
 }
 
+type MarketingView = 'home' | 'features' | 'about' | 'dev-notes' | 'app'
+
 const categoriesSeed = [
   { name: 'Rent', planned: 1200, actual: 1200 },
   { name: 'Groceries', planned: 420, actual: 368 },
@@ -97,6 +99,62 @@ const billsSeed: BudgetBill[] = [
 const spendStepOptions = [-5, -1, 1, 5]
 
 const spendEntriesSeed: SpendEntry[] = []
+
+const devNotesSeed = [
+  {
+    title: 'Spending tracker is live',
+    date: 'Dec 23, 2025',
+    summary:
+      'Log every purchase, link it to a bill, and watch your budget update in real time.',
+    tag: 'Updates',
+  },
+  {
+    title: 'Bill reminders now send automatically',
+    date: 'Dec 22, 2025',
+    summary:
+      'Recurring bills can trigger Resend reminders based on your lead-day setting.',
+    tag: 'Infrastructure',
+  },
+  {
+    title: 'Preferences got a manual save button',
+    date: 'Dec 21, 2025',
+    summary:
+      'Auto-save is still on, but you now have a clear Save Preferences action.',
+    tag: 'Quality',
+  },
+]
+
+const marketingViewFromParam = (value: string | null): MarketingView => {
+  switch (value) {
+    case 'features':
+      return 'features'
+    case 'about':
+      return 'about'
+    case 'dev-notes':
+      return 'dev-notes'
+    case 'updates':
+      return 'dev-notes'
+    case 'app':
+      return 'app'
+    default:
+      return 'home'
+  }
+}
+
+const marketingViewToParam = (view: MarketingView) => {
+  switch (view) {
+    case 'features':
+      return 'features'
+    case 'about':
+      return 'about'
+    case 'dev-notes':
+      return 'updates'
+    case 'app':
+      return 'app'
+    default:
+      return ''
+  }
+}
 
 const formatCurrency = (value: number) => {
   const rounded = Math.round(value)
@@ -320,6 +378,12 @@ function App() {
       ? new URLSearchParams(window.location.search).get('view')
       : null
   const isCommunityPage = viewParam === 'community'
+  const initialMarketingView = isCommunityPage
+    ? 'home'
+    : marketingViewFromParam(viewParam)
+  const [marketingView, setMarketingView] =
+    useState<MarketingView>(initialMarketingView)
+  const [isNavOpen, setIsNavOpen] = useState(false)
   const communityUrl = `${basePath}/?view=community`
   const homeUrl = `${basePath}/`
 
@@ -353,10 +417,39 @@ function App() {
   }, [isCommunityPage, userId])
 
   useEffect(() => {
+    const handlePopState = () => {
+      if (typeof window === 'undefined') return
+      const nextParam = new URLSearchParams(window.location.search).get('view')
+      if (nextParam === 'community') return
+      setMarketingView(marketingViewFromParam(nextParam))
+      setIsNavOpen(false)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
     if (!newSpend.category && budgetCategories.length > 0) {
       setNewSpend((prev) => ({ ...prev, category: budgetCategories[0].name }))
     }
   }, [budgetCategories, newSpend.category])
+
+  const marketingUrlFor = (view: MarketingView) => {
+    const param = marketingViewToParam(view)
+    return param ? `${basePath}/?view=${param}` : `${basePath}/`
+  }
+
+  const handleMarketingNav = (view: MarketingView) => {
+    setMarketingView(view)
+    setIsNavOpen(false)
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', marketingUrlFor(view))
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+    if (view === 'app') {
+      setActiveView('workspace')
+    }
+  }
 
   const currentBudgetState = useMemo<BudgetState>(
     () => ({
@@ -430,6 +523,18 @@ function App() {
 
   const scrollTo = (ref: { current: HTMLDivElement | null }) => {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const handleStartBudget = () => {
+    if (!requireLogin('Please log in to start your budget.')) {
+      return
+    }
+    if (marketingView !== 'home') {
+      handleMarketingNav('home')
+      window.setTimeout(() => scrollTo(builderRef), 200)
+      return
+    }
+    scrollTo(builderRef)
   }
 
   const handleAddCategory = () => {
@@ -2410,6 +2515,65 @@ function App() {
               <p className="brand-tag">Budgeting for real life</p>
             </div>
           </div>
+          <button
+            className="nav-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-controls="primary-nav"
+            aria-expanded={isNavOpen}
+            onClick={() => setIsNavOpen((prev) => !prev)}
+          >
+            Menu
+          </button>
+          <div
+            id="primary-nav"
+            className={`nav-links ${isNavOpen ? 'open' : ''}`}
+          >
+            <a
+              className={marketingView === 'home' ? 'nav-link active' : 'nav-link'}
+              href={marketingUrlFor('home')}
+              onClick={(event) => {
+                event.preventDefault()
+                handleMarketingNav('home')
+              }}
+            >
+              Home
+            </a>
+            <a
+              className={
+                marketingView === 'features' ? 'nav-link active' : 'nav-link'
+              }
+              href={marketingUrlFor('features')}
+              onClick={(event) => {
+                event.preventDefault()
+                handleMarketingNav('features')
+              }}
+            >
+              Features
+            </a>
+            <a
+              className={marketingView === 'about' ? 'nav-link active' : 'nav-link'}
+              href={marketingUrlFor('about')}
+              onClick={(event) => {
+                event.preventDefault()
+                handleMarketingNav('about')
+              }}
+            >
+              About
+            </a>
+            <a
+              className={
+                marketingView === 'dev-notes' ? 'nav-link active' : 'nav-link'
+              }
+              href={marketingUrlFor('dev-notes')}
+              onClick={(event) => {
+                event.preventDefault()
+                handleMarketingNav('dev-notes')
+              }}
+            >
+              Dev notes
+            </a>
+          </div>
           <div className="top-actions">
             {userEmail ? (
               <button className="ghost" onClick={handleLogout}>
@@ -2428,18 +2592,19 @@ function App() {
             <button
               className="solid"
               onClick={() => {
-                if (!requireLogin('Please log in to start your budget.')) {
+                if (!requireLogin('Please log in to open Budget Space.')) {
                   return
                 }
-                scrollTo(builderRef)
-                showToast('Budget setup started.')
+                handleMarketingNav('app')
+                showToast('Budget Space opened.')
               }}
             >
-              Create free budget
+              Budget Space
             </button>
           </div>
         </nav>
 
+        {marketingView === 'home' ? (
         <div className="hero-grid">
           <div className="hero-copy">
             <p className="eyebrow">Simple. Detailed. Yours.</p>
@@ -2452,14 +2617,14 @@ function App() {
               <button
                 className="solid"
                 onClick={() => {
-                  if (!requireLogin('Please log in to start your budget.')) {
+                  if (!requireLogin('Please log in to open Budget Space.')) {
                     return
                   }
-                  scrollTo(builderRef)
-                  showToast('Budget setup started.')
+                  handleMarketingNav('app')
+                  showToast('Budget Space opened.')
                 }}
               >
-                Start your budget
+                Budget Space
               </button>
             </div>
             <div className="stat-row">
@@ -2616,10 +2781,207 @@ function App() {
             )}
           </div>
         </div>
+        ) : null}
       </header>
 
       <main>
-        {userEmail ? (
+        {marketingView === 'home' ? (
+          <section className="seo-hero">
+            <div className="seo-hero-copy">
+              <span className="eyebrow">AI finance app</span>
+              <h2>Budgeting that actually sticks</h2>
+              <p>
+                Centsy is an AI finance app that helps you plan bills, track daily
+                spending, and keep cash flow steady without the guilt. Built for
+                real life, not spreadsheets.
+              </p>
+            </div>
+            <div className="seo-hero-highlights">
+              <div>
+                <strong>Track every purchase</strong>
+                <span>Snacks, coffee, groceries, you name it.</span>
+              </div>
+              <div>
+                <strong>Know what is left</strong>
+                <span>Daily spend rolls up into each bill.</span>
+              </div>
+              <div>
+                <strong>Save your cents</strong>
+                <span>We keep it cents-ly: small moves, big wins.</span>
+              </div>
+            </div>
+            <div className="section-actions">
+              <a
+                className="solid"
+                href={marketingUrlFor('features')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('features')
+                }}
+              >
+                Explore features
+              </a>
+              <a
+                className="ghost"
+                href={marketingUrlFor('dev-notes')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('dev-notes')
+                }}
+              >
+                Read dev notes
+              </a>
+            </div>
+          </section>
+        ) : null}
+        {marketingView === 'features' ? (
+          <section className="features">
+            <div className="section-head">
+              <div>
+                <h2>Features that keep you on track</h2>
+                <p>Everything you need to run a calm, consistent budget.</p>
+              </div>
+            </div>
+            <div className="feature-grid">
+              <article className="feature-card">
+                <h3>Smart bill planning</h3>
+                <p>Auto-suggested bills, recurring dates, and clear due reminders.</p>
+              </article>
+              <article className="feature-card">
+                <h3>Daily spending log</h3>
+                <p>Log every purchase and see it roll up into each bill instantly.</p>
+              </article>
+              <article className="feature-card">
+                <h3>Cash flow clarity</h3>
+                <p>Weekly views show where you are tight before the month begins.</p>
+              </article>
+              <article className="feature-card">
+                <h3>Goals that move</h3>
+                <p>Track savings, pay down debt, and see progress stay visible.</p>
+              </article>
+              <article className="feature-card">
+                <h3>Automated nudges</h3>
+                <p>Bill reminders keep you ahead without more work.</p>
+              </article>
+              <article className="feature-card">
+                <h3>Team-ready budgets</h3>
+                <p>Include partner income and keep the plan aligned together.</p>
+              </article>
+            </div>
+            <div className="section-actions">
+              <a
+                className="ghost"
+                href={marketingUrlFor('about')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('about')
+                }}
+              >
+                About Centsy
+              </a>
+            </div>
+          </section>
+        ) : null}
+        {marketingView === 'about' ? (
+          <section className="about">
+            <div className="section-head">
+              <div>
+                <h2>About Centsy</h2>
+                <p>
+                  Centsy is built for people who want a clearer, calmer relationship
+                  with money. We turn day-to-day spending into a simple rhythm so
+                  your budget feels like a plan you can actually follow. It is all
+                  about saving your cents, but more cents-ly.
+                </p>
+              </div>
+            </div>
+            <div className="about-grid">
+              <div>
+                <h3>Human-first budgeting</h3>
+                <p>
+                  Budgets should guide you, not shame you. Centsy keeps it calm,
+                  clear, and flexible.
+                </p>
+              </div>
+              <div>
+                <h3>Built for real life</h3>
+                <p>
+                  Track bills and tiny spends with the same simple workflow, so
+                  every purchase has a home.
+                </p>
+              </div>
+              <div>
+                <h3>Aligned with your goals</h3>
+                <p>
+                  From debt payoff to savings, every update shows how todays choices
+                  move you forward.
+                </p>
+              </div>
+            </div>
+            <div className="team-section">
+              <img
+                src="/team-ethan.png"
+                alt="Ethan Huynh, creator of Centsy"
+              />
+              <div>
+                <h3>Team</h3>
+                <p>
+                  Centsy is a one-person team led by Ethan Huynh, a full-stack
+                  developer who builds product, design, and infrastructure end to
+                  end. His focus is creating a budgeting experience that feels
+                  approachable, consistent, and useful every single day. He is
+                  passionate about saving money and sharing that mindset so more
+                  people can feel confident about where their dollars go.
+                </p>
+              </div>
+            </div>
+            <div className="about-actions">
+              <a
+                className="ghost"
+                href={marketingUrlFor('dev-notes')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('dev-notes')
+                }}
+              >
+                Read dev notes
+              </a>
+            </div>
+          </section>
+        ) : null}
+        {marketingView === 'dev-notes' ? (
+          <section className="dev-notes">
+            <div className="section-head">
+              <div>
+                <h2>Dev notes & updates</h2>
+                <p>Short, honest updates from the team building Centsy.</p>
+              </div>
+            </div>
+            <div className="dev-notes-grid">
+              {devNotesSeed.map((note) => (
+                <article className="dev-note-card" key={note.title}>
+                  <span className="tag">{note.tag}</span>
+                  <h3>{note.title}</h3>
+                  <p>{note.summary}</p>
+                  <small>{note.date}</small>
+                </article>
+              ))}
+            </div>
+            <div className="section-actions">
+              <a
+                className="ghost"
+                href={marketingUrlFor('home')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('home')
+                }}
+              >
+                Back to home
+              </a>
+            </div>
+          </section>
+        ) : null}
+        {marketingView === 'app' && userEmail ? (
           <>
         <section className="view-switcher">
           <div className="tab-row">
@@ -4015,7 +4377,8 @@ function App() {
           </div>
         </section>
           </>
-        ) : (
+        ) : null}
+        {marketingView === 'app' && !userEmail ? (
           <section className="locked-state">
             <div className="locked-card">
               <span className="tag">Login required</span>
@@ -4042,9 +4405,41 @@ function App() {
               </div>
             </div>
           </section>
-        )}
+        ) : null}
       </main>
       <footer className="site-footer">
+        <div className="footer-links">
+          <a
+            className="footer-link"
+            href={marketingUrlFor('features')}
+            onClick={(event) => {
+              event.preventDefault()
+              handleMarketingNav('features')
+            }}
+          >
+            Features
+          </a>
+          <a
+            className="footer-link"
+            href={marketingUrlFor('about')}
+            onClick={(event) => {
+              event.preventDefault()
+              handleMarketingNav('about')
+            }}
+          >
+            About
+          </a>
+          <a
+            className="footer-link"
+            href={marketingUrlFor('dev-notes')}
+            onClick={(event) => {
+              event.preventDefault()
+              handleMarketingNav('dev-notes')
+            }}
+          >
+            Dev notes
+          </a>
+        </div>
         <p>© {currentYear} Centsy. All rights reserved.</p>
       </footer>
 
