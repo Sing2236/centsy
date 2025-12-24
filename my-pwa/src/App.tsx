@@ -2528,6 +2528,9 @@ function App() {
             >
               Home
             </a>
+            <a className="nav-link" href={communityUrl}>
+              Community
+            </a>
             <a
               className={
                 marketingView === 'features' ? 'nav-link active' : 'nav-link'
