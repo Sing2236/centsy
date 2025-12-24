@@ -525,17 +525,6 @@ function App() {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  const handleStartBudget = () => {
-    if (!requireLogin('Please log in to start your budget.')) {
-      return
-    }
-    if (marketingView !== 'home') {
-      handleMarketingNav('home')
-      window.setTimeout(() => scrollTo(builderRef), 200)
-      return
-    }
-    scrollTo(builderRef)
-  }
 
   const handleAddCategory = () => {
     if (!newCategory.name.trim()) {
