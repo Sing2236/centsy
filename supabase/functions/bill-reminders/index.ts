@@ -87,6 +87,9 @@ const resolveDueDate = (bill: BudgetBill, reference: Date) => {
       return nextRecurringDate(recurring, reference)
     }
   }
+  if (/^monthly$/i.test(bill.date.trim())) {
+    return nextRecurringDate(1, reference)
+  }
   return parseDueDate(bill.date, reference)
 }
 
