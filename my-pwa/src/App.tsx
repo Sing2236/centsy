@@ -17,6 +17,7 @@ type ForumPost = {
   title: string
   body: string
   tags: string[]
+  category: string
   created_at: string
   updated_at: string
 }
@@ -102,6 +103,13 @@ const spendEntriesSeed: SpendEntry[] = []
 
 const devNotesSeed = [
   {
+    title: 'Community upgrades shipped',
+    date: 'Dec 24, 2025',
+    summary:
+      'Categories, tags, and search are now live in the community feed to keep threads easier to find.',
+    tag: 'Community',
+  },
+  {
     title: 'Spending tracker is live',
     date: 'Dec 23, 2025',
     summary:
@@ -122,6 +130,15 @@ const devNotesSeed = [
       'Auto-save is still on, but you now have a clear Save Preferences action.',
     tag: 'Quality',
   },
+]
+
+const forumCategoriesSeed = [
+  'Bills & essentials',
+  'Debt payoff',
+  'Saving wins',
+  'Side income',
+  'Family budgeting',
+  'General',
 ]
 
 const marketingViewFromParam = (value: string | null): MarketingView => {
@@ -351,10 +368,17 @@ function App() {
   const [forumLoading, setForumLoading] = useState(false)
   const [forumError, setForumError] = useState('')
   const [activeForumPostId, setActiveForumPostId] = useState<string | null>(null)
+  const [forumCategories, setForumCategories] = useState(forumCategoriesSeed)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [forumSearch, setForumSearch] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('all')
+  const [selectedTag, setSelectedTag] = useState('')
+  const [tagSearch, setTagSearch] = useState('')
   const [newPost, setNewPost] = useState({
     title: '',
     body: '',
     tags: '',
+    category: '',
   })
   const [newComment, setNewComment] = useState<Record<string, string>>({})
   const [activeView, setActiveView] = useState<
@@ -433,6 +457,12 @@ function App() {
       setNewSpend((prev) => ({ ...prev, category: budgetCategories[0].name }))
     }
   }, [budgetCategories, newSpend.category])
+
+  useEffect(() => {
+    if (!newPost.category && forumCategories.length > 0) {
+      setNewPost((prev) => ({ ...prev, category: forumCategories[0] }))
+    }
+  }, [forumCategories, newPost.category])
 
   const marketingUrlFor = (view: MarketingView) => {
     const param = marketingViewToParam(view)
@@ -941,11 +971,18 @@ function App() {
     showToast('Label removed.')
   }
 
-  const parseTags = (value: string) =>
-    value
+  const normalizeCategory = (value: string) => value.trim().replace(/\s+/g, ' ')
+
+  const parseTags = (value: string) => {
+    const normalized = value
       .split(',')
-      .map((tag) => tag.trim())
+      .map((tag) => tag.trim().toLowerCase())
       .filter(Boolean)
+    return Array.from(new Set(normalized))
+  }
+
+  const ensureCategory = (value: string) =>
+    normalizeCategory(value || '') || 'General'
 
   const loadForumPosts = async () => {
     setForumLoading(true)
@@ -959,9 +996,19 @@ function App() {
     } else {
       const formatted = (data ?? []).map((item) => ({
         ...item,
-        tags: Array.isArray(item.tags) ? item.tags : [],
+        tags: Array.isArray(item.tags)
+          ? item.tags.map((tag) => String(tag).toLowerCase())
+          : [],
+        category: ensureCategory(item.category),
       }))
       setForumPosts(formatted as ForumPost[])
+      const categorySet = new Set(forumCategoriesSeed)
+      formatted.forEach((post) => {
+        if (post.category) {
+          categorySet.add(post.category)
+        }
+      })
+      setForumCategories(Array.from(categorySet))
     }
     setForumLoading(false)
   }
@@ -979,6 +1026,25 @@ function App() {
     setForumComments((prev) => ({ ...prev, [postId]: (data ?? []) as ForumComment[] }))
   }
 
+  const handleAddForumCategory = () => {
+    const normalized = normalizeCategory(newCategoryName)
+    if (!normalized) {
+      showToast('Add a category name.')
+      return
+    }
+    if (forumCategories.some((category) => category.toLowerCase() === normalized.toLowerCase())) {
+      showToast('That category already exists.')
+      return
+    }
+    setForumCategories((prev) => [...prev, normalized])
+    setNewCategoryName('')
+    setNewPost((prev) => ({
+      ...prev,
+      category: prev.category || normalized,
+    }))
+    showToast('Category added.')
+  }
+
   const handleCreatePost = async () => {
     if (!requireLogin('Please log in to post.')) {
       return
@@ -994,6 +1060,7 @@ function App() {
       return
     }
     const tags = parseTags(newPost.tags)
+    const category = ensureCategory(newPost.category)
     const { data, error } = await supabase
       .from('forum_posts')
       .insert({
@@ -1001,6 +1068,7 @@ function App() {
         title,
         body,
         tags,
+        category,
         updated_at: new Date().toISOString(),
       })
       .select('*')
@@ -1009,8 +1077,13 @@ function App() {
       showToast('Could not publish your post.')
       return
     }
-    setForumPosts((prev) => [data as ForumPost, ...prev])
-    setNewPost({ title: '', body: '', tags: '' })
+    setForumPosts((prev) => [{ ...(data as ForumPost), category }, ...prev])
+    setForumCategories((prev) =>
+      prev.some((item) => item.toLowerCase() === category.toLowerCase())
+        ? prev
+        : [...prev, category]
+    )
+    setNewPost({ title: '', body: '', tags: '', category: category })
     showToast('Post published.')
   }
 
@@ -1901,6 +1974,50 @@ function App() {
     }
   }, [currentBudgetState, isHydrating, userId, autoSaveEnabled])
 
+  const forumTagCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    forumPosts.forEach((post) => {
+      post.tags.forEach((tag) => {
+        const normalized = tag.toLowerCase()
+        counts.set(normalized, (counts.get(normalized) ?? 0) + 1)
+      })
+    })
+    return counts
+  }, [forumPosts])
+
+  const forumCategoryCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    forumPosts.forEach((post) => {
+      const category = ensureCategory(post.category)
+      counts.set(category, (counts.get(category) ?? 0) + 1)
+    })
+    return counts
+  }, [forumPosts])
+
+  const forumTags = useMemo(
+    () =>
+      Array.from(forumTagCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([tag]) => tag),
+    [forumTagCounts]
+  )
+
+  const filteredForumPosts = useMemo(() => {
+    const search = forumSearch.trim().toLowerCase()
+    return forumPosts.filter((post) => {
+      const category = ensureCategory(post.category)
+      if (selectedCategory !== 'all' && category !== selectedCategory) {
+        return false
+      }
+      if (selectedTag && !post.tags.map((tag) => tag.toLowerCase()).includes(selectedTag)) {
+        return false
+      }
+      if (!search) return true
+      const haystack = `${post.title} ${post.body} ${category} ${post.tags.join(' ')}`.toLowerCase()
+      return haystack.includes(search)
+    })
+  }, [forumPosts, forumSearch, selectedCategory, selectedTag])
+
   const totalPortfolio = stocks.reduce(
     (sum, stock) => sum + stock.shares * stock.price,
     0
@@ -2208,6 +2325,23 @@ function App() {
               <p className="brand-tag">Real budgets, real people</p>
             </div>
           </div>
+          <div className="forum-header-search">
+            <input
+              type="text"
+              placeholder="Search posts, tags, categories"
+              value={forumSearch}
+              onChange={(event) => setForumSearch(event.target.value)}
+            />
+            {forumSearch ? (
+              <button
+                className="ghost small"
+                type="button"
+                onClick={() => setForumSearch('')}
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
           <div className="forum-actions">
             <button className="ghost" onClick={() => window.location.assign(homeUrl)}>
               Back to budget
@@ -2225,13 +2359,38 @@ function App() {
           <aside className="forum-rail">
             <div className="rail-card">
               <h3>Categories</h3>
-              <ul>
-                <li>Bills & essentials</li>
-                <li>Debt payoff</li>
-                <li>Saving wins</li>
-                <li>Side income</li>
-                <li>Family budgeting</li>
-              </ul>
+              <div className="rail-filters">
+                <button
+                  className={selectedCategory === 'all' ? 'pill active' : 'pill'}
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                >
+                  All ({forumPosts.length})
+                </button>
+                {forumCategories.map((category) => (
+                  <button
+                    className={
+                      selectedCategory === category ? 'pill active' : 'pill'
+                    }
+                    key={`category-${category}`}
+                    type="button"
+                    onClick={() => setSelectedCategory(category)}
+                  >
+                    {category} ({forumCategoryCounts.get(category) ?? 0})
+                  </button>
+                ))}
+              </div>
+              <div className="rail-add">
+                <input
+                  type="text"
+                  placeholder="Add category"
+                  value={newCategoryName}
+                  onChange={(event) => setNewCategoryName(event.target.value)}
+                />
+                <button className="ghost small" onClick={handleAddForumCategory}>
+                  Add
+                </button>
+              </div>
             </div>
             <div className="rail-card">
               <h3>Guidelines</h3>
@@ -2252,6 +2411,27 @@ function App() {
               <button className="ghost" onClick={loadForumPosts}>
                 Refresh
               </button>
+            </div>
+            <div className="forum-search">
+              <input
+                type="text"
+                placeholder="Search posts, tags, or categories"
+                value={forumSearch}
+                onChange={(event) => setForumSearch(event.target.value)}
+              />
+              {(forumSearch || selectedTag || selectedCategory !== 'all') ? (
+                <button
+                  className="ghost small"
+                  type="button"
+                  onClick={() => {
+                    setForumSearch('')
+                    setSelectedTag('')
+                    setSelectedCategory('all')
+                  }}
+                >
+                  Clear filters
+                </button>
+              ) : null}
             </div>
             <div className="forum-compose">
               <h3>Start a thread</h3>
@@ -2279,6 +2459,21 @@ function App() {
                   />
                 </label>
                 <label>
+                  Category
+                  <select
+                    value={newPost.category}
+                    onChange={(event) =>
+                      setNewPost((prev) => ({ ...prev, category: event.target.value }))
+                    }
+                  >
+                    {forumCategories.map((category) => (
+                      <option key={`category-option-${category}`} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
                   Tags
                   <input
                     type="text"
@@ -2289,6 +2484,25 @@ function App() {
                     }
                   />
                 </label>
+                {forumTags.length ? (
+                  <div className="tag-row">
+                    {forumTags.slice(0, 8).map((tag) => (
+                      <button
+                        className="tag-pill"
+                        key={`quick-tag-${tag}`}
+                        type="button"
+                        onClick={() => {
+                          const existing = parseTags(newPost.tags)
+                          if (existing.includes(tag)) return
+                          const next = [...existing, tag].join(', ')
+                          setNewPost((prev) => ({ ...prev, tags: next }))
+                        }}
+                      >
+                        + {tag}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <button className="solid small" onClick={handleCreatePost}>
                   Post question
                 </button>
@@ -2299,8 +2513,8 @@ function App() {
                 <p className="muted">Loading community posts...</p>
               ) : forumError ? (
                 <p className="muted">{forumError}</p>
-              ) : forumPosts.length ? (
-                forumPosts.map((post) => {
+              ) : filteredForumPosts.length ? (
+                filteredForumPosts.map((post) => {
                   const isOpen = activeForumPostId === post.id
                   const comments = forumComments[post.id] ?? []
                   return (
@@ -2313,6 +2527,9 @@ function App() {
                         <div className="thread-meta">
                           <span>{formatShortDate(post.created_at)}</span>
                           <span>{comments.length} replies</span>
+                          <span className="tag-pill static">
+                            {ensureCategory(post.category)}
+                          </span>
                           {post.user_id === userId ? (
                             <button
                               className="ghost small"
@@ -2393,18 +2610,37 @@ function App() {
                   )
                 })
               ) : (
-                <p className="muted">No posts yet. Start the first thread.</p>
+                <p className="muted">
+                  No posts match those filters. Try a different tag or category.
+                </p>
               )}
             </div>
           </section>
           <aside className="forum-rail">
             <div className="rail-card">
               <h3>Popular tags</h3>
+              <input
+                type="text"
+                placeholder="Search tags"
+                value={tagSearch}
+                onChange={(event) => setTagSearch(event.target.value)}
+              />
               <div className="tag-row">
-                <span className="tag-pill">groceries</span>
-                <span className="tag-pill">rent</span>
-                <span className="tag-pill">debt</span>
-                <span className="tag-pill">emergency</span>
+                {forumTags
+                  .filter((tag) => tag.includes(tagSearch.trim().toLowerCase()))
+                  .slice(0, 12)
+                  .map((tag) => (
+                    <button
+                      className={selectedTag === tag ? 'tag-pill active' : 'tag-pill'}
+                      key={`tag-${tag}`}
+                      type="button"
+                      onClick={() =>
+                        setSelectedTag((prev) => (prev === tag ? '' : tag))
+                      }
+                    >
+                      {tag} ({forumTagCounts.get(tag) ?? 0})
+                    </button>
+                  ))}
               </div>
             </div>
             <div className="rail-card">
