@@ -417,6 +417,7 @@ function App() {
   const saveTimer = useRef<number | null>(null)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [isHydrating, setIsHydrating] = useState(false)
+  const [isBudgetTransitioning, setIsBudgetTransitioning] = useState(false)
 
   useEffect(() => {
     const getSession = async () => {
@@ -463,6 +464,15 @@ function App() {
       setNewPost((prev) => ({ ...prev, category: forumCategories[0] }))
     }
   }, [forumCategories, newPost.category])
+
+  useEffect(() => {
+    if (!isBudgetTransitioning || marketingView !== 'app') return
+    scrollTo(workspaceRef)
+    const timer = window.setTimeout(() => {
+      setIsBudgetTransitioning(false)
+    }, 650)
+    return () => window.clearTimeout(timer)
+  }, [isBudgetTransitioning, marketingView])
 
   const marketingUrlFor = (view: MarketingView) => {
     const param = marketingViewToParam(view)
@@ -815,7 +825,12 @@ function App() {
     setShowCategoryForm(false)
     setShowGoalForm(false)
     showToast('Budget generated.')
-    scrollTo(workspaceRef)
+    setIsBudgetTransitioning(true)
+    if (marketingView === 'app') {
+      setActiveView('workspace')
+      return
+    }
+    handleMarketingNav('app')
   }
 
   const handleLogin = async () => {
@@ -4942,6 +4957,17 @@ function App() {
                 You will receive a confirmation email before you can sign in.
               </p>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+      {isBudgetTransitioning ? (
+        <div className="budget-transition" role="status" aria-live="polite">
+          <div className="budget-transition-card">
+            <div className="budget-transition-spinner" aria-hidden="true" />
+            <div>
+              <p>Building your budget</p>
+              <span>Opening Budget Space...</span>
+            </div>
           </div>
         </div>
       ) : null}
