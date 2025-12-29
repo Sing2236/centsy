@@ -1782,6 +1782,26 @@ button:disabled {
   align-items: center;
 }
 
+.spend-edit-panel {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.9rem;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #f7f7fb;
+}
+
+.spend-edit {
+  width: 100%;
+}
+
+.spend-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
 .spend-steps {
   display: flex;
   flex-wrap: wrap;

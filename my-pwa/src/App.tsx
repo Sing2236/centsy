@@ -46,6 +46,14 @@ type SpendEntry = {
   note: string
 }
 
+type SpendDraft = {
+  amount?: number
+  category?: string
+  merchant?: string
+  date?: string
+  isRefund?: boolean
+}
+
 type BudgetState = {
   incomePerPaycheck: number
   partnerIncome: number
@@ -289,6 +297,15 @@ function App() {
   const [expectedReturn, setExpectedReturn] = useState(7)
   const [monthlyInvestment, setMonthlyInvestment] = useState(200)
   const [spendEntries, setSpendEntries] = useState<SpendEntry[]>(spendEntriesSeed)
+  const [editingSpendId, setEditingSpendId] = useState<string | null>(null)
+  const [editSpendValues, setEditSpendValues] = useState({
+    merchant: '',
+    amount: '',
+    category: '',
+    date: new Date().toISOString().slice(0, 10),
+    note: '',
+    direction: 'expense' as 'expense' | 'refund',
+  })
   const [newSpend, setNewSpend] = useState({
     merchant: '',
     amount: '',
@@ -340,12 +357,15 @@ function App() {
     {
       role: 'assistant',
       content:
-        "I'm your Budget Copilot. Tell me what to change and I'll suggest a plan. I only apply changes after you say \"apply\".",
+        'Budget Copilot ready. Tell me what to change.',
     },
   ])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [pendingUpdates, setPendingUpdates] = useState<Partial<BudgetState> | null>(
+    null
+  )
+  const [pendingSpendDraft, setPendingSpendDraft] = useState<SpendDraft | null>(
     null
   )
   const [pendingLocalAction, setPendingLocalAction] = useState<{
@@ -737,7 +757,67 @@ function App() {
       adjustCategoryActual(target.category, -target.amount)
       return prev.filter((entry) => entry.id !== entryId)
     })
+    setEditingSpendId((prev) => (prev === entryId ? null : prev))
     showToast('Spend removed.')
+  }
+
+  const handleEditSpendEntry = (entryId: string) => {
+    const entry = spendEntries.find((item) => item.id === entryId)
+    if (!entry) return
+    setEditingSpendId(entryId)
+    setEditSpendValues({
+      merchant: entry.merchant,
+      amount: String(Math.abs(entry.amount)),
+      category: entry.category,
+      date: entry.date || new Date().toISOString().slice(0, 10),
+      note: entry.note,
+      direction: entry.amount < 0 ? 'refund' : 'expense',
+    })
+  }
+
+  const handleCancelSpendEdit = () => {
+    setEditingSpendId(null)
+  }
+
+  const handleSaveSpendEntry = (entryId: string) => {
+    const merchant = editSpendValues.merchant.trim() || 'Spend entry'
+    const amountValue = Number(editSpendValues.amount || 0)
+    if (!amountValue || amountValue <= 0) {
+      showToast('Enter a valid amount.')
+      return
+    }
+    if (!editSpendValues.category) {
+      showToast('Select a bill to track.')
+      return
+    }
+    const signedAmount =
+      editSpendValues.direction === 'refund'
+        ? -Math.abs(amountValue)
+        : Math.abs(amountValue)
+    const nextDate =
+      editSpendValues.date || new Date().toISOString().slice(0, 10)
+    const nextNote = editSpendValues.note.trim()
+    setSpendEntries((prev) => {
+      const target = prev.find((entry) => entry.id === entryId)
+      if (!target) return prev
+      const nextEntry = {
+        ...target,
+        merchant,
+        category: editSpendValues.category,
+        amount: signedAmount,
+        date: nextDate,
+        note: nextNote,
+      }
+      if (target.category !== nextEntry.category) {
+        adjustCategoryActual(target.category, -target.amount)
+        adjustCategoryActual(nextEntry.category, nextEntry.amount)
+      } else {
+        adjustCategoryActual(target.category, nextEntry.amount - target.amount)
+      }
+      return prev.map((entry) => (entry.id === entryId ? nextEntry : entry))
+    })
+    setEditingSpendId(null)
+    showToast('Spend updated.')
   }
 
   const handleEditGoal = (name: string) => {
@@ -1250,6 +1330,27 @@ function App() {
         date: item.date ?? '',
         note: item.note ?? '',
       }))
+    const sumSpendEntriesByCategory = (
+      items: Array<{ category: string; amount: number }>
+    ) => {
+      const totals = new Map<string, { total: number; label: string }>()
+      items.forEach((entry) => {
+        const label = entry.category ?? ''
+        const key = label.trim().toLowerCase()
+        if (!key) return
+        const existing = totals.get(key)
+        if (existing) {
+          existing.total += entry.amount
+        } else {
+          totals.set(key, { total: entry.amount, label })
+        }
+      })
+      return totals
+    }
+    const hasBudgetCategoriesUpdate = Object.prototype.hasOwnProperty.call(
+      updates,
+      'budgetCategories'
+    )
 
     if ('incomePerPaycheck' in updates && updates.incomePerPaycheck !== undefined) {
       setIncomePerPaycheck(Number(updates.incomePerPaycheck))
@@ -1344,8 +1445,40 @@ function App() {
     if ('expectedReturn' in updates && updates.expectedReturn !== undefined) {
       setExpectedReturn(Number(updates.expectedReturn))
     }
-    if ('spendEntries' in updates && Array.isArray(updates.spendEntries)) {
-      setSpendEntries(normalizeSpendEntries(updates.spendEntries))
+    const nextSpendEntries =
+      'spendEntries' in updates && Array.isArray(updates.spendEntries)
+        ? normalizeSpendEntries(updates.spendEntries)
+        : null
+    if (nextSpendEntries) {
+      setSpendEntries(nextSpendEntries)
+    }
+    if (nextSpendEntries && !hasBudgetCategoriesUpdate) {
+      const previousCategories = new Set(
+        spendEntries
+          .map((entry) => entry.category.trim().toLowerCase())
+          .filter(Boolean)
+      )
+      const totals = sumSpendEntriesByCategory(nextSpendEntries)
+      const affected = new Set([...previousCategories, ...totals.keys()])
+      setBudgetCategories((prev) => {
+        const next = prev.map((category) => {
+          const key = category.name.trim().toLowerCase()
+          if (!affected.has(key)) {
+            return category
+          }
+          const nextTotal = totals.get(key)?.total ?? 0
+          return { ...category, actual: nextTotal }
+        })
+        totals.forEach((value, key) => {
+          const exists = next.some(
+            (category) => category.name.trim().toLowerCase() === key
+          )
+          if (!exists) {
+            next.push({ name: value.label, planned: 0, actual: value.total })
+          }
+        })
+        return next
+      })
     }
   }
 
@@ -1434,6 +1567,32 @@ function App() {
       resetEverything: 'reset everything',
     }
     return action.actions.map((item) => descriptions[item]).filter(Boolean)
+  }
+
+  const applyPendingChanges = () => {
+    if (pendingLocalAction) {
+      applyLocalAction(pendingLocalAction)
+    } else if (pendingUpdates) {
+      applyBudgetUpdates(pendingUpdates)
+    } else {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Nothing to apply yet.' },
+      ])
+      return
+    }
+    setPendingUpdates(null)
+    setPendingLocalAction(null)
+    setPendingSummary('')
+    setPendingSpendDraft(null)
+    showToast('Changes applied.')
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        role: 'assistant',
+        content: 'Changes applied.',
+      },
+    ])
   }
 
   const getLocalCopilotAction = (message: string) => {
@@ -1602,6 +1761,170 @@ function App() {
     return { items: normalized, missing }
   }
 
+  const parseCurrencyValue = (value: string) => {
+    const normalized = value.replace(/,/g, '')
+    const parsed = Number.parseFloat(normalized)
+    return Number.isNaN(parsed) ? null : parsed
+  }
+
+  const parseSpendAmount = (text: string) => {
+    const dollarMatch = text.match(
+      /\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/
+    )
+    if (dollarMatch) {
+      return parseCurrencyValue(dollarMatch[1])
+    }
+    const wordMatch = text.match(
+      /\b(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\s*(?:dollars?|bucks?|usd)\b/i
+    )
+    if (wordMatch) {
+      return parseCurrencyValue(wordMatch[1])
+    }
+    const verbMatch = text.match(
+      /\b(?:spend|spent|pay|paid|expense|purchase|bought|buy|charge|charged|log)\b[^0-9$]{0,12}(\$?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/i
+    )
+    if (verbMatch) {
+      return parseCurrencyValue(verbMatch[1].replace(/^\$/, ''))
+    }
+    return null
+  }
+
+  const detectSpendDate = (text: string) => {
+    const isoMatch = text.match(/\b\d{4}-\d{2}-\d{2}\b/)
+    if (isoMatch) {
+      return { date: isoMatch[0], explicit: true }
+    }
+    const lower = text.toLowerCase()
+    const today = new Date()
+    const toIso = (date: Date) => date.toISOString().slice(0, 10)
+    if (lower.includes('yesterday')) {
+      const adjusted = new Date(today)
+      adjusted.setDate(today.getDate() - 1)
+      return { date: toIso(adjusted), explicit: true }
+    }
+    if (lower.includes('tomorrow')) {
+      const adjusted = new Date(today)
+      adjusted.setDate(today.getDate() + 1)
+      return { date: toIso(adjusted), explicit: true }
+    }
+    if (lower.includes('today') || lower.includes('tonight') || lower.includes('this month')) {
+      return { date: toIso(today), explicit: true }
+    }
+    const monthMatch = text.match(
+      /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}\b/i
+    )
+    if (monthMatch) {
+      const parsed = new Date(`${monthMatch[0]} ${currentYear}`)
+      if (!Number.isNaN(parsed.getTime())) {
+        return { date: toIso(parsed), explicit: true }
+      }
+    }
+    return { date: toIso(today), explicit: false }
+  }
+
+  const findSpendCategory = (text: string) => {
+    const normalized = text.toLowerCase()
+    const sorted = [...budgetCategories]
+      .map((category) => category.name)
+      .sort((a, b) => b.length - a.length)
+    const matched = sorted.find((name) => normalized.includes(name.toLowerCase()))
+    if (matched) {
+      return matched
+    }
+    const fallback = text.match(/\b(?:to|toward|towards|for|on)\s+([a-z][\w\s&-]{2,})/i)
+    if (fallback) {
+      return normalizeCategory(fallback[1])
+    }
+    return null
+  }
+
+  const parseSpendMerchant = (text: string) => {
+    const match = text.match(/\b(?:at|from)\s+([a-z0-9][a-z0-9&' .-]{1,40})/i)
+    if (!match) return null
+    const value = match[1].trim()
+    return value || null
+  }
+
+  const mergeSpendDraft = (draft: SpendDraft | null, text: string) => {
+    const next: SpendDraft = { ...(draft ?? {}) }
+    const amount = parseSpendAmount(text)
+    if (amount !== null) {
+      next.amount = amount
+    }
+    const category = findSpendCategory(text)
+    if (category) {
+      next.category = category
+    }
+    const merchant = parseSpendMerchant(text)
+    if (merchant) {
+      next.merchant = merchant
+    }
+    if (/\b(refund|reimbursement|credit|returned|return)\b/i.test(text)) {
+      next.isRefund = true
+    }
+    const detected = detectSpendDate(text)
+    if (detected.explicit) {
+      next.date = detected.date
+    }
+    return next
+  }
+
+  const buildSpendEntry = (draft: SpendDraft) => {
+    if (!draft.amount || !draft.category) {
+      return null
+    }
+    const signedAmount = draft.isRefund
+      ? -Math.abs(draft.amount)
+      : Math.abs(draft.amount)
+    const entry: SpendEntry = {
+      id: createSpendId(),
+      merchant: draft.merchant ?? 'Copilot entry',
+      category: draft.category,
+      amount: signedAmount,
+      date: draft.date ?? new Date().toISOString().slice(0, 10),
+      note: '',
+    }
+    const summary = draft.isRefund
+      ? `Add refund of ${formatCurrency(Math.abs(signedAmount))} to ${draft.category}?`
+      : `Add ${formatCurrency(Math.abs(signedAmount))} spend to ${draft.category}?`
+    return { entry, summary }
+  }
+
+  const parseSpendFromText = (text: string) => {
+    const lower = text.toLowerCase()
+    const amount = parseSpendAmount(text)
+    const spendIntent =
+      /\b(spent|expense|purchase|bought|buy|pay|paid|charge|charged|log|refund)\b/.test(
+        lower
+      ) || (/\bspend\b/.test(lower) && amount !== null)
+    if (!spendIntent) {
+      return null
+    }
+    const category = findSpendCategory(text)
+    const merchant = parseSpendMerchant(text)
+    const detectedDate = detectSpendDate(text)
+    const isRefund = /\b(refund|reimbursement|credit|returned|return)\b/.test(lower)
+    if (!amount || !category) {
+      const draft: SpendDraft = {
+        amount: amount ?? undefined,
+        category: category ?? undefined,
+        merchant: merchant ?? undefined,
+        isRefund: isRefund || undefined,
+      }
+      if (detectedDate.explicit) {
+        draft.date = detectedDate.date
+      }
+      return { missingAmount: !amount, missingCategory: !category, draft }
+    }
+    return buildSpendEntry({
+      amount,
+      category,
+      merchant: merchant ?? undefined,
+      date: detectedDate.explicit ? detectedDate.date : undefined,
+      isRefund,
+    })
+  }
+
   const mergeBills = (
     current: BudgetBill[],
     additions: Array<{ name: string; amount: number }>
@@ -1654,54 +1977,90 @@ function App() {
   const handleSendChat = async () => {
     const userMessage = chatInput.trim()
     if (!userMessage) return
+    const normalizedMessage = userMessage.toLowerCase()
     const nextMessages = [
       ...chatMessages,
       { role: 'user' as const, content: userMessage },
     ]
     setChatMessages(nextMessages)
     setChatInput('')
-    setChatLoading(true)
-    const applyNow =
-      userMessage.toLowerCase() === 'apply' ||
-      userMessage.toLowerCase() === 'yes' ||
-      userMessage.toLowerCase() === 'confirm'
-
-    if (applyNow && (pendingLocalAction || pendingUpdates)) {
-      if (pendingLocalAction) {
-        applyLocalAction(pendingLocalAction)
-      } else if (pendingUpdates) {
-        applyBudgetUpdates(pendingUpdates)
+    const applyIntentWords = new Set([
+      'apply',
+      'add it',
+      'do it',
+      'yes',
+      'confirm',
+      'ok',
+      'okay',
+      'sure',
+      'yep',
+      'go ahead',
+    ])
+    if (applyIntentWords.has(normalizedMessage)) {
+      if (normalizedMessage === 'apply' || pendingLocalAction || pendingUpdates) {
+        applyPendingChanges()
+        return
       }
+    }
+    if (/\b(cancel|never mind|nevermind|stop)\b/.test(normalizedMessage)) {
       setPendingUpdates(null)
       setPendingLocalAction(null)
       setPendingSummary('')
-      showToast('Changes applied.')
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: 'Changes applied. Want me to keep tuning the plan?',
-        },
-      ])
-      setChatLoading(false)
+      setPendingSpendDraft(null)
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: 'Canceled.' }])
       return
     }
-
-    if (applyNow) {
-      setChatMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'Nothing to apply yet.' },
-      ])
-      setChatLoading(false)
-      return
-    }
+    setChatLoading(true)
 
     setPendingUpdates(null)
     setPendingLocalAction(null)
     setPendingSummary('')
 
+    if (pendingSpendDraft) {
+      const hasSpendFollowup =
+        parseSpendAmount(userMessage) !== null ||
+        findSpendCategory(userMessage) !== null ||
+        parseSpendMerchant(userMessage) !== null ||
+        detectSpendDate(userMessage).explicit ||
+        /\b(refund|reimbursement|credit|returned|return)\b/i.test(userMessage)
+      if (hasSpendFollowup) {
+        const mergedDraft = mergeSpendDraft(pendingSpendDraft, userMessage)
+        const built = buildSpendEntry(mergedDraft)
+        if (built) {
+          setPendingSpendDraft(null)
+          setPendingUpdates({ spendEntries: [built.entry, ...spendEntries] })
+          setPendingSummary(built.summary)
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: 'Spend ready. Click Apply changes to confirm.',
+            },
+          ])
+        } else {
+          setPendingSpendDraft(mergedDraft)
+          const missingAmount = !mergedDraft.amount
+          const missingCategory = !mergedDraft.category
+          const question =
+            missingAmount && missingCategory
+              ? 'How much and which category?'
+              : missingAmount
+              ? 'How much was it?'
+              : 'Which category should I use?'
+          setChatMessages((prev) => [
+            ...prev,
+            { role: 'assistant', content: question },
+          ])
+        }
+        setChatLoading(false)
+        return
+      }
+      setPendingSpendDraft(null)
+    }
+
     const parsedBills = parseBillsFromText(userMessage)
     if (parsedBills) {
+      setPendingSpendDraft(null)
       const nextBills = mergeBills(budgetBills, parsedBills.items)
       const nextCategories = mergeCategoriesFromBills(
         budgetCategories,
@@ -1723,15 +2082,46 @@ function App() {
         {
           role: 'assistant',
           content:
-            'I parsed those bills. Say "apply" or click Apply changes to add them.',
+            'Parsed those bills. Click Apply changes to confirm.',
         },
       ])
       setChatLoading(false)
       return
     }
 
+    const parsedSpend = parseSpendFromText(userMessage)
+    if (parsedSpend) {
+      if ('entry' in parsedSpend && parsedSpend.entry) {
+        setPendingSpendDraft(null)
+        const nextEntries = [parsedSpend.entry, ...spendEntries]
+        setPendingUpdates({ spendEntries: nextEntries })
+        setPendingSummary(parsedSpend.summary)
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: 'Spend ready. Click Apply changes to confirm.',
+          },
+        ])
+      } else {
+        setPendingSpendDraft(parsedSpend.draft ?? null)
+        const missingAmount = parsedSpend.missingAmount
+        const missingCategory = parsedSpend.missingCategory
+        const question =
+          missingAmount && missingCategory
+            ? 'How much and which category?'
+            : missingAmount
+            ? 'How much was it?'
+            : 'Which category should I use?'
+        setChatMessages((prev) => [...prev, { role: 'assistant', content: question }])
+      }
+      setChatLoading(false)
+      return
+    }
+
     const localAction = getLocalCopilotAction(userMessage)
     if (localAction) {
+      setPendingSpendDraft(null)
       const describedActions = describeLocalActions(localAction)
       setPendingLocalAction(localAction)
       setPendingSummary(
@@ -1741,8 +2131,7 @@ function App() {
         ...prev,
         {
           role: 'assistant',
-          content:
-            'I can do that. Say "apply" or click Apply changes when you are ready.',
+          content: 'Ready. Click Apply changes to confirm.',
         },
       ])
       setChatLoading(false)
@@ -3927,19 +4316,160 @@ function App() {
                   <h4>Recent spends</h4>
                   <span className="tag">Editable</span>
                 </div>
+                {editingSpendId ? (
+                  <div className="spend-edit-panel">
+                    <div className="card-head">
+                      <h4>Edit spend</h4>
+                      <span className="tag">Selected</span>
+                    </div>
+                    <div className="spend-form spend-edit">
+                      <label>
+                        Merchant
+                        <input
+                          type="text"
+                          value={editSpendValues.merchant}
+                          onChange={(event) =>
+                            setEditSpendValues((prev) => ({
+                              ...prev,
+                              merchant: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <div className="spend-form-row">
+                        <label>
+                          Amount
+                          <input
+                            type="number"
+                            value={editSpendValues.amount}
+                            onChange={(event) =>
+                              setEditSpendValues((prev) => ({
+                                ...prev,
+                                amount: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Date
+                          <input
+                            type="date"
+                            value={editSpendValues.date}
+                            onChange={(event) =>
+                              setEditSpendValues((prev) => ({
+                                ...prev,
+                                date: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Bill
+                          <select
+                            value={editSpendValues.category}
+                            onChange={(event) =>
+                              setEditSpendValues((prev) => ({
+                                ...prev,
+                                category: event.target.value,
+                              }))
+                            }
+                          >
+                            {budgetCategories.length ? (
+                              budgetCategories.map((category) => (
+                                <option
+                                  key={`spend-edit-${category.name}`}
+                                  value={category.name}
+                                >
+                                  {category.name}
+                                </option>
+                              ))
+                            ) : (
+                              <option value="">Add a bill first</option>
+                            )}
+                          </select>
+                        </label>
+                      </div>
+                      <label>
+                        Note (optional)
+                        <input
+                          type="text"
+                          value={editSpendValues.note}
+                          onChange={(event) =>
+                            setEditSpendValues((prev) => ({
+                              ...prev,
+                              note: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <div className="spend-toggle">
+                        <button
+                          className={
+                            editSpendValues.direction === 'expense'
+                              ? 'solid small'
+                              : 'ghost small'
+                          }
+                          type="button"
+                          onClick={() =>
+                            setEditSpendValues((prev) => ({
+                              ...prev,
+                              direction: 'expense',
+                            }))
+                          }
+                        >
+                          Expense
+                        </button>
+                        <button
+                          className={
+                            editSpendValues.direction === 'refund'
+                              ? 'solid small'
+                              : 'ghost small'
+                          }
+                          type="button"
+                          onClick={() =>
+                            setEditSpendValues((prev) => ({
+                              ...prev,
+                              direction: 'refund',
+                            }))
+                          }
+                        >
+                          Refund
+                        </button>
+                      </div>
+                      <div className="spend-edit-actions">
+                        <button
+                          className="solid small"
+                          type="button"
+                          onClick={() => handleSaveSpendEntry(editingSpendId)}
+                        >
+                          Save
+                        </button>
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={handleCancelSpendEdit}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 {spendEntriesSorted.length ? (
                   <ul className="spend-log-list">
                     {spendEntriesSorted.map((entry) => (
                       <li className="spend-log-row" key={entry.id}>
                         <div className="spend-log-main">
                           <strong>{entry.merchant}</strong>
-                          <span>
-                            {entry.category} • {formatShortDate(entry.date)}
-                          </span>
+                            <span>
+                              {entry.category} &#8250; {formatShortDate(entry.date)}
+                            </span>
                           {entry.note ? <em>{entry.note}</em> : null}
                         </div>
                         <div
-                          className={`spend-log-amount ${entry.amount < 0 ? 'negative' : ''}`}
+                          className={`spend-log-amount ${
+                            entry.amount < 0 ? 'negative' : ''
+                          }`}
                         >
                           {formatCurrency(entry.amount)}
                         </div>
@@ -3956,6 +4486,13 @@ function App() {
                               </button>
                             ))}
                           </div>
+                          <button
+                            className="solid small"
+                            type="button"
+                            onClick={() => handleEditSpendEntry(entry.id)}
+                          >
+                            Edit
+                          </button>
                           <button
                             className="danger small"
                             type="button"
@@ -4289,8 +4826,8 @@ function App() {
             <div>
               <h2>Budget Copilot</h2>
               <p>
-                Tell me what to change. I will suggest edits and only apply them
-                after you say \"apply\".
+                Tell me what to change. I will suggest edits. Click Apply changes
+                to confirm.
               </p>
             </div>
             <span className="tag">Powered by Groq</span>
@@ -4318,7 +4855,7 @@ function App() {
                 <input
                   type="text"
                   value={chatInput}
-                  placeholder="Tell me what to change (say apply to confirm)."
+                  placeholder="Tell me what to change."
                   onChange={(event) => setChatInput(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
@@ -4340,22 +4877,7 @@ function App() {
                     <button
                       className="solid small"
                       onClick={() => {
-                        if (pendingLocalAction) {
-                          applyLocalAction(pendingLocalAction)
-                        } else if (pendingUpdates) {
-                          applyBudgetUpdates(pendingUpdates)
-                        }
-                        setPendingUpdates(null)
-                        setPendingLocalAction(null)
-                        setPendingSummary('')
-                        showToast('Changes applied.')
-                        setChatMessages((prev) => [
-                          ...prev,
-                          {
-                            role: 'assistant',
-                            content: 'Changes applied. Want me to adjust anything else?',
-                          },
-                        ])
+                        applyPendingChanges()
                       }}
                     >
                       Apply changes
@@ -4374,7 +4896,7 @@ function App() {
                 </>
               ) : (
                 <p className="muted">
-                  Suggestions land here. Nothing applies until you say \"apply\".
+                  Suggestions land here. Click Apply changes to confirm.
                 </p>
               )}
             </div>
