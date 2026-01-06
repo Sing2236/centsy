@@ -81,7 +81,14 @@ type BudgetState = {
   spendEntries: SpendEntry[]
 }
 
-type MarketingView = 'home' | 'features' | 'about' | 'dev-notes' | 'app'
+type MarketingView =
+  | 'home'
+  | 'features'
+  | 'about'
+  | 'dev-notes'
+  | 'terms'
+  | 'privacy'
+  | 'app'
 
 const categoriesSeed = [
   { name: 'Rent', planned: 1200, actual: 1200 },
@@ -159,6 +166,10 @@ const marketingViewFromParam = (value: string | null): MarketingView => {
       return 'dev-notes'
     case 'updates':
       return 'dev-notes'
+    case 'terms':
+      return 'terms'
+    case 'privacy':
+      return 'privacy'
     case 'app':
       return 'app'
     default:
@@ -174,6 +185,10 @@ const marketingViewToParam = (view: MarketingView) => {
       return 'about'
     case 'dev-notes':
       return 'updates'
+    case 'terms':
+      return 'terms'
+    case 'privacy':
+      return 'privacy'
     case 'app':
       return 'app'
     default:
@@ -430,6 +445,8 @@ function App() {
   const [isNavOpen, setIsNavOpen] = useState(false)
   const communityUrl = `${basePath}/?view=community`
   const homeUrl = `${basePath}/`
+  const termsPdfUrl = `${basePath}/terms.pdf`
+  const privacyPdfUrl = `${basePath}/privacy.pdf`
 
   const builderRef = useRef<HTMLDivElement | null>(null)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
@@ -3613,6 +3630,165 @@ function App() {
             </div>
           </section>
         ) : null}
+        {marketingView === 'terms' ? (
+          <section className="legal-page">
+            <div className="legal-head">
+              <div className="section-head">
+                <h2>Terms and Conditions</h2>
+                <p>Effective date: {currentYear}</p>
+              </div>
+              <a className="ghost legal-download" href={termsPdfUrl} download>
+                Download PDF
+              </a>
+            </div>
+            <div className="legal-prose">
+              <p>
+                These Terms and Conditions ("Terms") govern your access to and use
+                of Centsy (the "Service"). By using the Service, you agree to these
+                Terms.
+              </p>
+              <h3>1. The Service</h3>
+              <p>
+                Centsy provides budgeting tools, AI-guided planning, bill
+                reminders, spending logs, goal tracking, exports, and community
+                discussions to help you manage personal finances.
+              </p>
+              <h3>2. Eligibility and accounts</h3>
+              <ul>
+                <li>You must be at least 13 years old to use the Service.</li>
+                <li>
+                  Provide accurate information and keep your account credentials
+                  secure.
+                </li>
+                <li>
+                  You are responsible for activity that occurs under your
+                  account.
+                </li>
+              </ul>
+              <h3>3. Community and user content</h3>
+              <ul>
+                <li>
+                  You retain ownership of content you submit and grant Centsy a
+                  license to host and display it.
+                </li>
+                <li>
+                  Do not post sensitive personal data in public threads or
+                  violate the rights of others.
+                </li>
+                <li>
+                  We may remove content or restrict accounts that violate these
+                  Terms.
+                </li>
+              </ul>
+              <h3>4. Acceptable use</h3>
+              <ul>
+                <li>Do not misuse the Service or attempt to disrupt systems.</li>
+                <li>Do not scrape, reverse engineer, or bypass security.</li>
+                <li>Do not upload malware, spam, or illegal content.</li>
+              </ul>
+              <h3>5. AI guidance and no financial advice</h3>
+              <p>
+                Budget insights and AI guidance are informational only and are not
+                financial, legal, or tax advice. You are responsible for your
+                financial decisions and outcomes.
+              </p>
+              <h3>6. Communications</h3>
+              <p>
+                We send service emails such as verification and bill reminders you
+                enable. You may opt out of non-essential communications.
+              </p>
+              <h3>7. Changes and termination</h3>
+              <p>
+                We may update the Service or these Terms from time to time. We may
+                suspend or terminate access for violations or to protect the
+                Service and users.
+              </p>
+              <h3>8. Contact</h3>
+              <p>
+                Questions? Email us at{' '}
+                <a href="mailto:support@centsy.co">support@centsy.co</a>.
+              </p>
+            </div>
+          </section>
+        ) : null}
+        {marketingView === 'privacy' ? (
+          <section className="legal-page">
+            <div className="legal-head">
+              <div className="section-head">
+                <h2>Privacy Policy</h2>
+                <p>Effective date: {currentYear}</p>
+              </div>
+              <a className="ghost legal-download" href={privacyPdfUrl} download>
+                Download PDF
+              </a>
+            </div>
+            <div className="legal-prose">
+              <p>
+                This Privacy Policy explains how Centsy collects, uses, and
+                shares information when you use the Service.
+              </p>
+              <h3>1. Information we collect</h3>
+              <ul>
+                <li>Account data such as email address and login identifiers.</li>
+                <li>
+                  Budget data including bills, categories, goals, spending logs,
+                  and reminder settings.
+                </li>
+                <li>
+                  Community content you submit, such as posts, comments, and
+                  tags.
+                </li>
+                <li>
+                  Usage and device data like IP address, browser type, and
+                  interactions with the Service.
+                </li>
+              </ul>
+              <h3>2. How we use information</h3>
+              <ul>
+                <li>Provide, personalize, and maintain the Service.</li>
+                <li>Save and sync your budgets across devices.</li>
+                <li>Send verification emails and reminders you enable.</li>
+                <li>Improve features, analytics, and reliability.</li>
+                <li>Detect abuse and keep the Service secure.</li>
+              </ul>
+              <h3>3. Sharing of information</h3>
+              <ul>
+                <li>
+                  Service providers that help us host, store, analyze, email,
+                  and power AI features.
+                </li>
+                <li>
+                  Community content you post is visible to other users.
+                </li>
+                <li>
+                  Legal or safety disclosures when required by law.
+                </li>
+              </ul>
+              <h3>4. Retention</h3>
+              <p>
+                We retain information as long as needed to provide the Service
+                and meet legal obligations. You can request deletion of your
+                account data.
+              </p>
+              <h3>5. Security</h3>
+              <p>
+                We use reasonable safeguards to protect data, but no system is
+                100% secure. Please protect your credentials.
+              </p>
+              <h3>6. Your choices</h3>
+              <ul>
+                <li>Access, export, or delete your data on request.</li>
+                <li>Update your account information in settings.</li>
+                <li>Control optional notifications in preferences.</li>
+              </ul>
+              <h3>7. Contact</h3>
+              <p>
+                Questions or requests? Email{' '}
+                <a href="mailto:support@centsy.co">support@centsy.co</a>.
+              </p>
+            </div>
+          </section>
+        ) : null}
         {marketingView === 'app' && userEmail ? (
           <>
         <section className="view-switcher">
@@ -5205,6 +5381,38 @@ function App() {
             Dev notes
           </a>
         </div>
+        <div className="footer-links secondary">
+          <a
+            className="footer-link"
+            href={marketingUrlFor('terms')}
+            onClick={(event) => {
+              event.preventDefault()
+              handleMarketingNav('terms')
+            }}
+          >
+            Terms
+          </a>
+          <a
+            className="footer-link"
+            href={marketingUrlFor('privacy')}
+            onClick={(event) => {
+              event.preventDefault()
+              handleMarketingNav('privacy')
+            }}
+          >
+            Privacy
+          </a>
+          <a className="footer-link" href={termsPdfUrl} download>
+            Terms PDF
+          </a>
+          <a className="footer-link" href={privacyPdfUrl} download>
+            Privacy PDF
+          </a>
+        </div>
+        <p className="legal-contact">
+          Questions? Contact us at{' '}
+          <a href="mailto:support@centsy.co">support@centsy.co</a>.
+        </p>
         <p>© {currentYear} Centsy. All rights reserved.</p>
       </footer>
 

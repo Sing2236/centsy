@@ -1244,6 +1244,80 @@
   text-decoration: none;
 }
 
+.footer-links.secondary {
+  margin-top: 0.4rem;
+  margin-bottom: 1.2rem;
+}
+
+.footer-links.secondary .footer-link {
+  font-size: 0.82rem;
+  color: var(--ink-500);
+}
+
+.legal-page {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.legal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.legal-download {
+  align-self: flex-start;
+}
+
+.legal-prose {
+  background: #fff;
+  border-radius: 20px;
+  padding: 1.8rem;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  display: grid;
+  gap: 0.8rem;
+}
+
+.legal-prose h3 {
+  margin: 0.6rem 0 0.2rem;
+  font-size: 1.1rem;
+  color: #0f172a;
+}
+
+.legal-prose p {
+  margin: 0;
+  color: var(--ink-600);
+  line-height: 1.6;
+}
+
+.legal-prose ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--ink-600);
+  display: grid;
+  gap: 0.4rem;
+}
+
+.legal-prose a {
+  color: var(--ink-700);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.legal-contact {
+  margin: 0 0 0.6rem;
+  color: var(--ink-600);
+}
+
+.legal-contact a {
+  color: var(--ink-700);
+  font-weight: 600;
+  text-decoration: none;
+}
+
 @media (max-width: 900px) {
   .seo-hero {
     grid-template-columns: 1fr;
