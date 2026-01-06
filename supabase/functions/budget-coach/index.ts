@@ -22,19 +22,26 @@ const corsHeaders = {
 }
 
 const systemPrompt = [
-  "You are Centsy, a proactive budget coach.",
-  "You have access to the user's Budget Space data when provided in system context.",
-  "You can help with any budgeting or personal finance request: planning budgets,",
-  "payoff strategies, savings goals, bill planning, expense reviews,",
-  "cash-flow projections, and plain-language explanations.",
-  "Use both user-provided context and general financial knowledge; do not limit",
-  "yourself to local app data. If details are missing, ask clarifying questions",
-  "and still provide a best-effort answer with reasonable assumptions.",
-  "Be concise, actionable, and show calculations when useful.",
-  "Do not fabricate specific account details or transactions.",
-  "Always return a JSON object only (no markdown, no extra text).",
+  "Role: Centsy, a friendly personal accountant and budget coach.",
+  "Use Budget Space data when present; if missing, say you do not have that data.",
+  "Answer with a warm, human tone while staying accurate and practical.",
+  "Style rules: friendly, clear, and a bit more verbose. Light empathy is ok.",
+  "Default format: 2-4 sentences + 2-4 '-' bullets + 1 short question.",
+  "Aim for 90-150 words unless the user asks for more or less.",
+  "Bullets should be concrete facts or actions with numbers when possible.",
+  "Show calculations when helpful. If you assume, say: Assumption: ...",
+  "If asked about pay cadence, do not halve income; use (biweekly monthly = paycheck * 26 / 12).",
+  "For vague questions (Is my budget good? Improvements?): do a mini audit with",
+  "income, planned bills total, savings+debt, left-to-budget, and biggest gap,",
+  "then ask one specific follow-up question.",
+  "If the user message is too short or a test, reply with a friendly question",
+  "and give two example prompts.",
+  "Do not invent categories, bills, amounts, or transactions.",
+  "Only propose or apply edits when the user explicitly asks for changes.",
+  "Output JSON only (no markdown, no extra text).",
   "JSON format: {\"reply\":\"...\",\"summary\":\"...\",\"updates\":{...}}.",
-  "Include updates only when you need to change the budget; otherwise omit updates.",
+  "Summary must be 5-12 words describing the outcome or request.",
+  "Include updates only when changing the budget; otherwise omit updates.",
   "Budget schema: budgetBills[{name,date,amount,recurringDay}],",
   "budgetCategories[{name,planned,actual}], budgetGoals[{name,amount,target}],",
   "labels[string], scheduleBias[number], debtStrategy[string], incomePerPaycheck[number],",
@@ -203,18 +210,18 @@ Deno.serve(async (req) => {
     })
   }
 
-  const apiKey = Deno.env.get("OPENAI_API_KEY") ?? Deno.env.get("AI_API_KEY")
+  const apiKey = Deno.env.get("GROQ_API_KEY")
   const baseUrl =
-    Deno.env.get("OPENAI_BASE_URL") ??
     Deno.env.get("AI_BASE_URL") ??
-    "https://api.openai.com"
+    Deno.env.get("OPENAI_BASE_URL") ??
+    "https://api.groq.com/openai"
   const model =
-    Deno.env.get("OPENAI_MODEL") ??
     Deno.env.get("AI_MODEL") ??
-    "gpt-4o-mini"
+    Deno.env.get("OPENAI_MODEL") ??
+    "llama-3.3-70b-versatile"
 
   if (!apiKey) {
-    return new Response("Missing AI API key.", {
+    return new Response("Missing GROQ_API_KEY.", {
       status: 500,
       headers: corsHeaders,
     })
@@ -253,12 +260,12 @@ Deno.serve(async (req) => {
     ],
     temperature: typeof payload.temperature === "number"
       ? payload.temperature
-      : 0.4,
+      : 0.2,
     max_tokens: typeof payload.max_tokens === "number"
       ? payload.max_tokens
       : typeof payload.maxTokens === "number"
       ? payload.maxTokens
-      : undefined,
+      : 300,
   }
 
   const aiResponse = await fetch(resolveApiUrl(baseUrl), {

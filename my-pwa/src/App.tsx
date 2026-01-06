@@ -133,6 +133,13 @@ const spendEntriesSeed: SpendEntry[] = []
 
 const devNotesSeed = [
   {
+    title: 'Copilot removals tightened',
+    date: 'Jan 05, 2026',
+    summary:
+      'Removal requests now take priority over spend logging, so bills, categories, goals, labels, stocks, and spend entries can be deleted with Apply.',
+    tag: 'Copilot',
+  },
+  {
     title: 'Community upgrades shipped',
     date: 'Dec 24, 2025',
     summary:
@@ -1874,7 +1881,12 @@ function App() {
     const match = text.match(/\b(?:at|from)\s+([a-z0-9][a-z0-9&' .-]{1,40})/i)
     if (!match) return null
     const value = match[1].trim()
-    return value || null
+    const trimmed = value
+      .split(
+        /\s+(?:for|on|to|toward|towards|yesterday|today|tomorrow|this)\b/i
+      )[0]
+      .trim()
+    return trimmed || null
   }
 
   const mergeSpendDraft = (draft: SpendDraft | null, text: string) => {
@@ -1925,15 +1937,18 @@ function App() {
   const parseSpendFromText = (text: string): ParsedSpend | null => {
     const lower = text.toLowerCase()
     const amount = parseSpendAmount(text)
+    const category = findSpendCategory(text)
+    const merchant = parseSpendMerchant(text)
+    const hasSpendSignal = amount !== null || category !== null || merchant !== null
     const spendIntent =
-      /\b(spent|expense|purchase|bought|buy|pay|paid|charge|charged|log|refund)\b/.test(
-        lower
-      ) || (/\bspend\b/.test(lower) && amount !== null)
+      (hasSpendSignal &&
+        /\b(spent|expense|purchase|bought|buy|pay|paid|charge|charged|log|refund)\b/.test(
+          lower
+        )) ||
+      (/\bspend\b/.test(lower) && amount !== null)
     if (!spendIntent) {
       return null
     }
-    const category = findSpendCategory(text)
-    const merchant = parseSpendMerchant(text)
     const detectedDate = detectSpendDate(text)
     const isRefund = /\b(refund|reimbursement|credit|returned|return)\b/.test(lower)
     if (!amount || !category) {
@@ -1955,6 +1970,192 @@ function App() {
       date: detectedDate.explicit ? detectedDate.date : undefined,
       isRefund,
     })
+  }
+
+  const parseRemovalRequest = (text: string) => {
+    const normalized = text.toLowerCase()
+    if (!/\b(remove|delete|drop|erase)\b/.test(normalized)) {
+      return null
+    }
+    if (/\b(all|everything|reset|wipe|clear)\b/.test(normalized)) {
+      return null
+    }
+    if (/\b(schedule|notification|preference|settings)\b/.test(normalized)) {
+      return null
+    }
+
+    const wantsBill = /\bbill\b/.test(normalized)
+    const wantsCategory = /\bcategory\b/.test(normalized)
+    const wantsGoal = /\bgoal\b/.test(normalized)
+    const wantsLabel = /\blabel\b/.test(normalized)
+    const wantsStock = /\b(stock|holding|investment|ticker|shares)\b/.test(
+      normalized
+    )
+    const wantsSpend = /\b(spend|transaction|purchase|expense|entry|charge)\b/.test(
+      normalized
+    )
+
+    const findNameMatch = (names: string[]) =>
+      [...names]
+        .filter(Boolean)
+        .sort((a, b) => b.length - a.length)
+        .find((name) => normalized.includes(name.toLowerCase())) ?? null
+
+    const billMatch = findNameMatch(
+      budgetBills.map((bill) => bill.name.trim())
+    )
+    const categoryMatch = findNameMatch(
+      budgetCategories.map((category) => category.name.trim())
+    )
+    const goalMatch = findNameMatch(budgetGoals.map((goal) => goal.name.trim()))
+    const labelMatch = findNameMatch(labels.map((label) => label.trim()))
+    const stockMatch = findNameMatch(
+      stocks.map((stock) => stock.symbol.trim())
+    )
+
+    const findSpendMatch = () => {
+      if (!spendEntries.length) return null
+      if (/\b(last|latest|recent)\b/.test(normalized)) {
+        return spendEntries[0]
+      }
+      const merchant = parseSpendMerchant(text)
+      const category = findSpendCategory(text)
+      const amount = parseSpendAmount(text)
+      const dateInfo = detectSpendDate(text)
+      const merchantNeedle = merchant?.toLowerCase()
+      const categoryNeedle = category?.toLowerCase()
+      return (
+        spendEntries.find((entry) => {
+          if (
+            merchantNeedle &&
+            !entry.merchant.toLowerCase().includes(merchantNeedle)
+          ) {
+            return false
+          }
+          if (
+            categoryNeedle &&
+            entry.category.toLowerCase() !== categoryNeedle
+          ) {
+            return false
+          }
+          if (amount !== null && Math.abs(entry.amount) !== Math.abs(amount)) {
+            return false
+          }
+          if (dateInfo.explicit && entry.date !== dateInfo.date) {
+            return false
+          }
+          return true
+        }) ?? null
+      )
+    }
+
+    const hasSpendHint =
+      wantsSpend ||
+      /\b(spend|transaction|purchase|expense|entry|charge)\b/.test(normalized) ||
+      !!parseSpendMerchant(text) ||
+      !!findSpendCategory(text)
+    const spendMatch = hasSpendHint ? findSpendMatch() : null
+
+    if (wantsBill) {
+      return billMatch
+        ? { kind: 'bill' as const, name: billMatch }
+        : { kind: 'missing' as const, target: 'bill' as const }
+    }
+    if (wantsCategory) {
+      return categoryMatch
+        ? { kind: 'category' as const, name: categoryMatch }
+        : { kind: 'missing' as const, target: 'category' as const }
+    }
+    if (wantsGoal) {
+      return goalMatch
+        ? { kind: 'goal' as const, name: goalMatch }
+        : { kind: 'missing' as const, target: 'goal' as const }
+    }
+    if (wantsLabel) {
+      return labelMatch
+        ? { kind: 'label' as const, name: labelMatch }
+        : { kind: 'missing' as const, target: 'label' as const }
+    }
+    if (wantsStock) {
+      return stockMatch
+        ? { kind: 'stock' as const, symbol: stockMatch }
+        : { kind: 'missing' as const, target: 'stock' as const }
+    }
+    if (wantsSpend) {
+      return spendMatch
+        ? { kind: 'spend' as const, entry: spendMatch }
+        : { kind: 'missing' as const, target: 'spend' as const }
+    }
+
+    const matches: Array<{ kind: string; label: string; value: string }> = []
+    if (billMatch) {
+      matches.push({ kind: 'bill', label: `bill "${billMatch}"`, value: billMatch })
+    }
+    if (categoryMatch) {
+      matches.push({
+        kind: 'category',
+        label: `category "${categoryMatch}"`,
+        value: categoryMatch,
+      })
+    }
+    if (goalMatch) {
+      matches.push({ kind: 'goal', label: `goal "${goalMatch}"`, value: goalMatch })
+    }
+    if (labelMatch) {
+      matches.push({
+        kind: 'label',
+        label: `label "${labelMatch}"`,
+        value: labelMatch,
+      })
+    }
+    if (stockMatch) {
+      matches.push({
+        kind: 'stock',
+        label: `stock "${stockMatch}"`,
+        value: stockMatch,
+      })
+    }
+    if (spendMatch) {
+      const spendLabel = spendMatch.merchant
+        ? `spend at "${spendMatch.merchant}"`
+        : 'spend entry'
+      matches.push({
+        kind: 'spend',
+        label: spendLabel,
+        value: spendMatch.id,
+      })
+    }
+
+    if (matches.length === 1) {
+      const match = matches[0]
+      if (match.kind === 'bill') {
+        return { kind: 'bill' as const, name: match.value }
+      }
+      if (match.kind === 'category') {
+        return { kind: 'category' as const, name: match.value }
+      }
+      if (match.kind === 'goal') {
+        return { kind: 'goal' as const, name: match.value }
+      }
+      if (match.kind === 'label') {
+        return { kind: 'label' as const, name: match.value }
+      }
+      if (match.kind === 'stock') {
+        return { kind: 'stock' as const, symbol: match.value }
+      }
+      if (match.kind === 'spend' && spendMatch) {
+        return { kind: 'spend' as const, entry: spendMatch }
+      }
+    }
+
+    if (matches.length > 1) {
+      return {
+        kind: 'ambiguous' as const,
+        options: matches.map((match) => match.label),
+      }
+    }
+
+    return { kind: 'missing' as const, target: 'item' as const }
   }
 
   const mergeBills = (
@@ -2115,6 +2316,184 @@ function App() {
           role: 'assistant',
           content:
             'Parsed those bills. Click Apply changes to confirm.',
+        },
+      ])
+      setChatLoading(false)
+      return
+    }
+
+    const removal = parseRemovalRequest(userMessage)
+    if (removal) {
+      setPendingSpendDraft(null)
+      if (removal.kind === 'missing') {
+        const question = (() => {
+          switch (removal.target) {
+            case 'bill':
+              return 'Which bill should I remove?'
+            case 'category':
+              return 'Which category should I remove?'
+            case 'goal':
+              return 'Which goal should I remove?'
+            case 'label':
+              return 'Which label should I remove?'
+            case 'stock':
+              return 'Which stock should I remove?'
+            case 'spend':
+              return 'Which spend should I remove?'
+            default:
+              return 'What should I remove (bill, category, goal, label, stock, or spend)?'
+          }
+        })()
+        setChatMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: question },
+        ])
+        setChatLoading(false)
+        return
+      }
+      if (removal.kind === 'ambiguous') {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `I found multiple matches: ${removal.options.join(', ')}. Which one should I remove?`,
+          },
+        ])
+        setChatLoading(false)
+        return
+      }
+
+      if (removal.kind === 'bill') {
+        const nextBills = budgetBills.filter(
+          (bill) => bill.name.toLowerCase() !== removal.name.toLowerCase()
+        )
+        const nextCategories = budgetCategories.filter(
+          (category) =>
+            category.name.toLowerCase() !== removal.name.toLowerCase()
+        )
+        const removedFromBills = nextBills.length !== budgetBills.length
+        const removedFromCategories =
+          nextCategories.length !== budgetCategories.length
+        if (!removedFromBills && !removedFromCategories) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: `I couldn't find a bill named "${removal.name}".`,
+            },
+          ])
+          setChatLoading(false)
+          return
+        }
+        setPendingUpdates({
+          budgetBills: nextBills,
+          budgetCategories: nextCategories,
+        })
+        setPendingSummary(`Remove ${removal.name} from your bills?`)
+      } else if (removal.kind === 'category') {
+        const nextCategories = budgetCategories.filter(
+          (category) =>
+            category.name.toLowerCase() !== removal.name.toLowerCase()
+        )
+        const nextBills = budgetBills.filter(
+          (bill) => bill.name.toLowerCase() !== removal.name.toLowerCase()
+        )
+        if (nextCategories.length === budgetCategories.length) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: `I couldn't find a category named "${removal.name}".`,
+            },
+          ])
+          setChatLoading(false)
+          return
+        }
+        setPendingUpdates({
+          budgetCategories: nextCategories,
+          budgetBills: nextBills,
+        })
+        setPendingSummary(`Remove ${removal.name} from your categories?`)
+      } else if (removal.kind === 'goal') {
+        const nextGoals = budgetGoals.filter(
+          (goal) => goal.name.toLowerCase() !== removal.name.toLowerCase()
+        )
+        if (nextGoals.length === budgetGoals.length) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: `I couldn't find a goal named "${removal.name}".`,
+            },
+          ])
+          setChatLoading(false)
+          return
+        }
+        setPendingUpdates({ budgetGoals: nextGoals })
+        setPendingSummary(`Remove goal "${removal.name}"?`)
+      } else if (removal.kind === 'label') {
+        const nextLabels = labels.filter(
+          (label) => label.toLowerCase() !== removal.name.toLowerCase()
+        )
+        if (nextLabels.length === labels.length) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: `I couldn't find a label named "${removal.name}".`,
+            },
+          ])
+          setChatLoading(false)
+          return
+        }
+        setPendingUpdates({ labels: nextLabels })
+        setPendingSummary(`Remove label "${removal.name}"?`)
+      } else if (removal.kind === 'stock') {
+        const nextStocks = stocks.filter(
+          (stock) => stock.symbol.toLowerCase() !== removal.symbol.toLowerCase()
+        )
+        if (nextStocks.length === stocks.length) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: `I couldn't find a stock named "${removal.symbol}".`,
+            },
+          ])
+          setChatLoading(false)
+          return
+        }
+        setPendingUpdates({ stocks: nextStocks })
+        setPendingSummary(`Remove ${removal.symbol} holding?`)
+      } else if (removal.kind === 'spend') {
+        const nextSpendEntries = spendEntries.filter(
+          (entry) => entry.id !== removal.entry.id
+        )
+        if (nextSpendEntries.length === spendEntries.length) {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              content: `I couldn't find that spend entry.`,
+            },
+          ])
+          setChatLoading(false)
+          return
+        }
+        const spendLabel = removal.entry.merchant
+          ? ` at ${removal.entry.merchant}`
+          : ''
+        setPendingUpdates({ spendEntries: nextSpendEntries })
+        setPendingSummary(
+          `Remove ${formatCurrency(Math.abs(removal.entry.amount))}${spendLabel}?`
+        )
+      }
+
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: 'Ready. Click Apply changes to confirm.',
         },
       ])
       setChatLoading(false)
@@ -3290,7 +3669,17 @@ function App() {
               >
                 Budget Space
               </button>
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => handleMarketingNav('features')}
+              >
+                See how it works
+              </button>
             </div>
+            <p className="hero-note">
+              Private by default. Export anytime. No spreadsheets required.
+            </p>
             <div className="stat-row">
               <div>
                 <strong>6 min</strong>
