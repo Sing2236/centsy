@@ -30,6 +30,13 @@ type ForumComment = {
   created_at: string
 }
 
+type UserProfile = {
+  user_id: string
+  username: string
+  username_updated_at: string
+  created_at: string
+}
+
 type BudgetBill = {
   name: string
   date: string
@@ -112,6 +119,7 @@ type AppView =
   | 'planner'
   | 'invest'
   | 'copilot'
+  | 'concierge'
   | 'personalize'
 
 const categoriesSeed = [
@@ -140,7 +148,16 @@ const spendStepOptions = [-5, -1, 1, 5]
 
 const spendEntriesSeed: SpendEntry[] = []
 
+const usernamePattern = /^[A-Za-z0-9_]{3,20}$/
+
 const devNotesSeed = [
+  {
+    title: 'Community usernames + Savings Concierge fixes',
+    date: 'Mar 10, 2026',
+    summary:
+      'Username onboarding now prompts on first login, posts/replies show @names, and usernames are editable every 30 days in Preferences. Savings Concierge output now renders reliably and strips stray JSON fields.',
+    tag: 'Community',
+  },
   {
     title: 'Copilot removals tightened',
     date: 'Jan 05, 2026',
@@ -186,6 +203,16 @@ const forumCategoriesSeed = [
   'Family budgeting',
   'General',
 ]
+
+const savingsConciergeContext = [
+  'Mode: Savings Concierge.',
+  'Goal: help the user lower recurring bills and subscriptions.',
+  'Provide step-by-step negotiation or cancellation scripts (phone/chat/email).',
+  'Include: prep checklist, negotiation script, fallback offer, and follow-up note.',
+  'Use Budget Space data to prioritize the biggest savings opportunities.',
+  'Do not claim actions were completed; give clear next steps and ask for details.',
+  'Only suggest budget updates when the user explicitly asks to update amounts.',
+].join(' ')
 
 const marketingViewFromParam = (value: string | null): MarketingView => {
   switch (value) {
@@ -319,6 +346,48 @@ const formatShortDate = (value: string) => {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+const formatLongDate = (value: string) => {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+const extractReplyFromJsonString = (value: string) => {
+  const trimmed = value.trim()
+  if (!trimmed.includes('"reply"')) return null
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const candidate = fenceMatch ? fenceMatch[1].trim() : trimmed
+  const start = candidate.indexOf('{')
+  const end = candidate.lastIndexOf('}')
+  if (start !== -1 && end !== -1 && end > start) {
+    const jsonText = candidate.slice(start, end + 1)
+    try {
+      const parsed = JSON.parse(jsonText) as { reply?: unknown }
+      return typeof parsed.reply === 'string' ? parsed.reply : null
+    } catch {
+      // fall through to regex extraction
+    }
+  }
+  const summaryMatch = candidate.match(
+    /"reply"\s*:\s*"([\s\S]*?)"\s*,\s*"summary"\s*:/
+  )
+  const updatesMatch = candidate.match(
+    /"reply"\s*:\s*"([\s\S]*?)"\s*,\s*"updates"\s*:/
+  )
+  const fallbackMatch =
+    summaryMatch || updatesMatch || candidate.match(/"reply"\s*:\s*"([\s\S]*?)"\s*(?:,|})/)
+  if (!fallbackMatch) return null
+  return fallbackMatch[1]
+    .replace(/\\n/g, '\n')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
+}
+
 
 function App() {
   const [budgetGenerated, setBudgetGenerated] = useState(false)
@@ -390,6 +459,13 @@ function App() {
   const [authLoading, setAuthLoading] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [usernameDraft, setUsernameDraft] = useState('')
+  const [showUsernameModal, setShowUsernameModal] = useState(false)
+  const [usernameSaving, setUsernameSaving] = useState(false)
+  const [usernameError, setUsernameError] = useState('')
+  const [usernamePromptDismissed, setUsernamePromptDismissed] = useState(false)
+  const [profileLoaded, setProfileLoaded] = useState(false)
   const [activePanel, setActivePanel] = useState<
     'cadence' | 'strategy' | 'labels' | 'schedule' | null
   >(null)
@@ -408,6 +484,22 @@ function App() {
   ])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
+  const [savingsStep, setSavingsStep] = useState<'bill' | 'target' | 'plan'>(
+    'bill'
+  )
+  const [savingsBill, setSavingsBill] = useState('')
+  const [savingsTarget, setSavingsTarget] = useState('')
+  const [savingsMethod, setSavingsMethod] = useState<'phone' | 'chat' | 'email'>(
+    'phone'
+  )
+  const [savingsProvider, setSavingsProvider] = useState('')
+  const [savingsNotes, setSavingsNotes] = useState('')
+  const [savingsPlan, setSavingsPlan] = useState('')
+  const [savingsLoading, setSavingsLoading] = useState(false)
+  const [savingsError, setSavingsError] = useState('')
+  const [savingsPendingUpdates, setSavingsPendingUpdates] =
+    useState<Partial<BudgetState> | null>(null)
+  const [savingsPendingSummary, setSavingsPendingSummary] = useState('')
   const [pendingUpdates, setPendingUpdates] = useState<Partial<BudgetState> | null>(
     null
   )
@@ -435,6 +527,9 @@ function App() {
   const [forumError, setForumError] = useState('')
   const [activeForumPostId, setActiveForumPostId] = useState<string | null>(null)
   const [forumCategories, setForumCategories] = useState(forumCategoriesSeed)
+  const [profileByUserId, setProfileByUserId] = useState<Record<string, string>>(
+    {}
+  )
   const [newCategoryName, setNewCategoryName] = useState('')
   const [forumSearch, setForumSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
@@ -450,6 +545,7 @@ function App() {
   const [activeView, setActiveView] = useState<AppView>('workspace')
   const [categoryRange, setCategoryRange] = useState({ min: 0, max: 3000 })
   const [onboardingCollapsed, setOnboardingCollapsed] = useState(false)
+  const [showIncomeEditor, setShowIncomeEditor] = useState(false)
   const currentYear = new Date().getFullYear()
   const showSetupGuide = !budgetGenerated && !onboardingCollapsed
   const showLegacySteps = !budgetGenerated && !showSetupGuide
@@ -499,6 +595,59 @@ function App() {
       listener.subscription.unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!userId) {
+        setUserProfile(null)
+        setUsernameDraft('')
+        setShowUsernameModal(false)
+        setUsernamePromptDismissed(false)
+        setProfileLoaded(false)
+        return
+      }
+      setProfileLoaded(false)
+      setUsernamePromptDismissed(false)
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('user_id, username, username_updated_at, created_at')
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (error) {
+        showToast('Could not load your profile.')
+        setUserProfile(null)
+        setUsernameDraft('')
+        setProfileLoaded(true)
+        return
+      }
+      if (data) {
+        const profile = data as UserProfile
+        setUserProfile(profile)
+        setUsernameDraft(profile.username ?? '')
+        setProfileByUserId((prev) => ({
+          ...prev,
+          [profile.user_id]: profile.username,
+        }))
+        setProfileLoaded(true)
+        return
+      }
+      setUserProfile(null)
+      setUsernameDraft('')
+      setProfileLoaded(true)
+    }
+    loadProfile()
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId || !profileLoaded) return
+    if (!userProfile?.username && !usernamePromptDismissed) {
+      setShowUsernameModal(true)
+      return
+    }
+    if (userProfile?.username) {
+      setShowUsernameModal(false)
+    }
+  }, [userId, userProfile, usernamePromptDismissed, profileLoaded])
 
   useEffect(() => {
     if (isCommunityPage) {
@@ -629,6 +778,30 @@ function App() {
     ]
   )
 
+  const savingsCandidates = useMemo(
+    () => {
+      const source =
+        budgetBills.length > 0
+          ? budgetBills.map((bill) => ({ name: bill.name, amount: bill.amount }))
+          : budgetCategories.map((category) => ({
+              name: category.name,
+              amount: category.planned,
+            }))
+      return source
+        .filter((item) => item.name.trim().length > 0)
+        .sort((a, b) => b.amount - a.amount)
+    },
+    [budgetBills, budgetCategories]
+  )
+
+  useEffect(() => {
+    if (!savingsCandidates.length) return
+    const hasMatch = savingsCandidates.some((item) => item.name === savingsBill)
+    if (!savingsBill || !hasMatch) {
+      setSavingsBill(savingsCandidates[0].name)
+    }
+  }, [savingsBill, savingsCandidates])
+
   const showToast = (message: string) => {
     setToast(message)
     if (toastTimer.current) {
@@ -636,6 +809,46 @@ function App() {
     }
     toastTimer.current = window.setTimeout(() => setToast(''), 2500)
   }
+
+  const getUsernameValidationError = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return 'Choose a username to continue.'
+    if (!usernamePattern.test(trimmed)) {
+      return 'Use 3-20 letters, numbers, or underscores.'
+    }
+    return ''
+  }
+
+  const getUsernameNextChangeDate = (updatedAt?: string | null) => {
+    if (!updatedAt) return null
+    const parsed = new Date(updatedAt)
+    if (Number.isNaN(parsed.getTime())) return null
+    const next = new Date(parsed)
+    next.setDate(next.getDate() + 30)
+    return next
+  }
+
+  const getUsernameCooldownDays = (updatedAt?: string | null) => {
+    const nextChange = getUsernameNextChangeDate(updatedAt)
+    if (!nextChange) return 0
+    const diffMs = nextChange.getTime() - Date.now()
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return Math.max(0, diffDays)
+  }
+
+  const formatForumUsername = (id: string) => {
+    const username = profileByUserId[id]
+    return username ? `@${username}` : 'Member'
+  }
+
+  const usernameCooldownDays = getUsernameCooldownDays(
+    userProfile?.username_updated_at
+  )
+  const usernameNextChangeDate = getUsernameNextChangeDate(
+    userProfile?.username_updated_at
+  )
+  const usernameChangeLocked =
+    Boolean(userProfile?.username) && usernameCooldownDays > 0
 
   const requireLogin = (message: string) => {
     if (userEmail) return true
@@ -1024,6 +1237,80 @@ function App() {
     showToast('Logged out.')
   }
 
+  const openUsernameModal = () => {
+    setUsernameDraft(userProfile?.username ?? '')
+    setUsernameError('')
+    setShowUsernameModal(true)
+    setUsernamePromptDismissed(false)
+  }
+
+  const closeUsernameModal = () => {
+    setShowUsernameModal(false)
+    setUsernameError('')
+    if (!userProfile?.username) {
+      setUsernamePromptDismissed(true)
+    }
+  }
+
+  const handleUsernameSave = async () => {
+    if (!userId) {
+      showToast('Please log in to set a username.')
+      return
+    }
+    const trimmed = usernameDraft.trim()
+    const validationError = getUsernameValidationError(trimmed)
+    if (validationError) {
+      setUsernameError(validationError)
+      return
+    }
+    if (userProfile?.username && trimmed === userProfile.username) {
+      showToast('That username is already saved.')
+      setShowUsernameModal(false)
+      return
+    }
+    const cooldownDays = getUsernameCooldownDays(userProfile?.username_updated_at)
+    if (userProfile?.username && cooldownDays > 0) {
+      showToast(
+        `Username updates are available in ${cooldownDays} day${
+          cooldownDays === 1 ? '' : 's'
+        }.`
+      )
+      return
+    }
+    setUsernameSaving(true)
+    setUsernameError('')
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .upsert(
+        {
+          user_id: userId,
+          username: trimmed,
+          username_updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      )
+      .select('user_id, username, username_updated_at, created_at')
+      .single()
+    if (error) {
+      const message = error.message.toLowerCase().includes('duplicate')
+        ? 'That username is already taken.'
+        : 'Could not save your username.'
+      showToast(message)
+      setUsernameSaving(false)
+      return
+    }
+    const profile = data as UserProfile
+    setUserProfile(profile)
+    setUsernameDraft(profile.username)
+    setProfileByUserId((prev) => ({
+      ...prev,
+      [profile.user_id]: profile.username,
+    }))
+    setShowUsernameModal(false)
+    showToast('Username saved.')
+    setUsernameSaving(false)
+  }
+
   const handleManualPreferencesSave = async () => {
     if (!requireLogin('Please log in to save your preferences.')) {
       return
@@ -1155,6 +1442,29 @@ function App() {
   const ensureCategory = (value: string) =>
     normalizeCategory(value || '') || 'General'
 
+  const loadUserProfiles = async (userIds: string[]) => {
+    const uniqueIds = Array.from(new Set(userIds.filter(Boolean)))
+    const missing = uniqueIds.filter((id) => !profileByUserId[id])
+    if (!missing.length) return
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('user_id, username')
+      .in('user_id', missing)
+    if (error) {
+      return
+    }
+    if (!data?.length) return
+    setProfileByUserId((prev) => {
+      const next = { ...prev }
+      data.forEach((profile) => {
+        if (profile.username) {
+          next[profile.user_id] = profile.username
+        }
+      })
+      return next
+    })
+  }
+
   const loadForumPosts = async () => {
     setForumLoading(true)
     setForumError('')
@@ -1180,6 +1490,7 @@ function App() {
         }
       })
       setForumCategories(Array.from(categorySet))
+      loadUserProfiles(formatted.map((post) => post.user_id))
     }
     setForumLoading(false)
   }
@@ -1195,6 +1506,7 @@ function App() {
       return
     }
     setForumComments((prev) => ({ ...prev, [postId]: (data ?? []) as ForumComment[] }))
+    loadUserProfiles((data ?? []).map((comment) => comment.user_id))
   }
 
   const handleAddForumCategory = () => {
@@ -1218,6 +1530,11 @@ function App() {
 
   const handleCreatePost = async () => {
     if (!requireLogin('Please log in to post.')) {
+      return
+    }
+    if (!userProfile?.username) {
+      showToast('Set a username to post in the community.')
+      openUsernameModal()
       return
     }
     const title = newPost.title.trim()
@@ -1276,6 +1593,11 @@ function App() {
 
   const handleCreateComment = async (postId: string) => {
     if (!requireLogin('Please log in to reply.')) {
+      return
+    }
+    if (!userProfile?.username) {
+      showToast('Set a username to reply in the community.')
+      openUsernameModal()
       return
     }
     const body = newComment[postId]?.trim()
@@ -2620,6 +2942,92 @@ function App() {
     setChatLoading(false)
   }
 
+  const handleGenerateSavingsPlaybook = async () => {
+    if (!requireLogin('Please log in to build a savings playbook.')) {
+      return
+    }
+    const targetValue = Number(savingsTarget || 0)
+    if (!savingsBill) {
+      showToast('Choose a bill to target first.')
+      return
+    }
+    if (!targetValue || targetValue <= 0) {
+      showToast('Add a monthly savings target.')
+      return
+    }
+    if (savingsLoading) {
+      return
+    }
+
+    const matched = savingsCandidates.find((item) => item.name === savingsBill)
+    const billAmount = matched?.amount ?? 0
+    const provider = savingsProvider.trim()
+    const notes = savingsNotes.trim()
+    const prompt = [
+      `Create a savings playbook for ${savingsBill}.`,
+      billAmount ? `Current monthly amount: ${formatCurrency(billAmount)}.` : '',
+      `Target savings: ${formatCurrency(targetValue)} per month.`,
+      `Preferred contact: ${savingsMethod}.`,
+      provider ? `Provider/company: ${provider}.` : '',
+      notes ? `Notes: ${notes}.` : '',
+      'Include prep checklist, negotiation script, fallback offer, and follow-up note.',
+    ]
+      .filter(Boolean)
+      .join(' ')
+
+    setSavingsLoading(true)
+    setSavingsError('')
+    setSavingsPlan('')
+    setSavingsPendingUpdates(null)
+    setSavingsPendingSummary('')
+    setSavingsStep('plan')
+
+    try {
+      const { data, error } = await supabase.functions.invoke('budget-coach', {
+        body: {
+          messages: [{ role: 'user', content: prompt }],
+          budget: currentBudgetState,
+          context: savingsConciergeContext,
+        },
+      })
+
+      if (error) {
+        setSavingsLoading(false)
+        setSavingsError(error.message || 'Savings Concierge is unavailable.')
+        return
+      }
+      if (data?.error) {
+        setSavingsLoading(false)
+        setSavingsError(`Concierge error: ${data.error}`)
+        return
+      }
+      if (!data) {
+        setSavingsLoading(false)
+        setSavingsError('Savings Concierge did not return a response.')
+        return
+      }
+      const replyRaw =
+        typeof data?.reply === 'string' ? data.reply : 'I am ready to help.'
+      const reply = extractReplyFromJsonString(replyRaw) ?? replyRaw
+      if (data?.updates && typeof data.updates === 'object') {
+        const updateKeys = Object.keys(data.updates)
+        if (updateKeys.length > 0) {
+          setSavingsPendingUpdates(data.updates)
+          setSavingsPendingSummary(
+            data?.summary ?? 'Apply these savings updates?'
+          )
+        }
+      }
+      setSavingsPlan(reply)
+      setSavingsLoading(false)
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Savings Concierge is unavailable.'
+      setSavingsLoading(false)
+      setSavingsError(message)
+    }
+  }
+
   const handleExportCsv = () => {
     if (!requireLogin('Please log in to export your budget.')) {
       return
@@ -2870,6 +3278,52 @@ function App() {
     })
   }, [forumPosts, forumSearch, selectedCategory, selectedTag])
 
+  const usernameModalCloseLabel = userProfile?.username ? 'Close' : 'Not now'
+  const usernameModal = showUsernameModal ? (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={closeUsernameModal}
+    >
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="card-head">
+          <h3>Choose a username</h3>
+          <button className="ghost small" onClick={closeUsernameModal}>
+            {usernameModalCloseLabel}
+          </button>
+        </div>
+        <div className="modal-form">
+          <label>
+            Username
+            <input
+              type="text"
+              placeholder="BudgetBuddy"
+              value={usernameDraft}
+              onChange={(event) => {
+                setUsernameDraft(event.target.value)
+                if (usernameError) {
+                  setUsernameError('')
+                }
+              }}
+            />
+          </label>
+          <p className="helper">
+            {usernameError ||
+              'Use 3-20 letters, numbers, or underscores. Update every 30 days.'}
+          </p>
+        </div>
+        <button className="solid" onClick={handleUsernameSave} disabled={usernameSaving}>
+          {usernameSaving ? 'Saving...' : 'Save username'}
+        </button>
+      </div>
+    </div>
+  ) : null
+
   const totalPortfolio = stocks.reduce(
     (sum, stock) => sum + stock.shares * stock.price,
     0
@@ -2924,6 +3378,10 @@ function App() {
   const spendEntriesSorted = [...spendEntries].sort((a, b) =>
     b.date.localeCompare(a.date)
   )
+  const selectedSavings = savingsCandidates.find(
+    (item) => item.name === savingsBill
+  )
+  const selectedSavingsAmount = selectedSavings?.amount ?? 0
   const scheduledBills =
     budgetBills.length > 0
       ? budgetBills
@@ -3369,6 +3827,7 @@ function App() {
                 filteredForumPosts.map((post) => {
                   const isOpen = activeForumPostId === post.id
                   const comments = forumComments[post.id] ?? []
+                  const authorLabel = formatForumUsername(post.user_id)
                   return (
                     <article className="forum-thread" key={post.id}>
                       <div className="thread-main">
@@ -3377,6 +3836,7 @@ function App() {
                           <p className="muted">{post.body}</p>
                         </div>
                         <div className="thread-meta">
+                          <span className="tag-pill static">{authorLabel}</span>
                           <span>{formatShortDate(post.created_at)}</span>
                           <span>{comments.length} replies</span>
                           <span className="tag-pill static">
@@ -3416,24 +3876,32 @@ function App() {
                       {isOpen ? (
                         <div className="forum-replies">
                           {comments.length ? (
-                            comments.map((comment) => (
-                              <div className="forum-reply" key={comment.id}>
-                                <p>{comment.body}</p>
-                                <div className="reply-meta">
-                                  <span>{formatShortDate(comment.created_at)}</span>
-                                  {comment.user_id === userId ? (
-                                    <button
-                                      className="ghost small"
-                                      onClick={() =>
-                                        handleDeleteComment(post.id, comment.id)
-                                      }
-                                    >
-                                      Delete
-                                    </button>
-                                  ) : null}
+                            comments.map((comment) => {
+                              const replyMeta = [
+                                formatForumUsername(comment.user_id),
+                                formatShortDate(comment.created_at),
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')
+                              return (
+                                <div className="forum-reply" key={comment.id}>
+                                  <p>{comment.body}</p>
+                                  <div className="reply-meta">
+                                    <span>{replyMeta}</span>
+                                    {comment.user_id === userId ? (
+                                      <button
+                                        className="ghost small"
+                                        onClick={() =>
+                                          handleDeleteComment(post.id, comment.id)
+                                        }
+                                      >
+                                        Delete
+                                      </button>
+                                    ) : null}
+                                  </div>
                                 </div>
-                              </div>
-                            ))
+                              )
+                            })
                           ) : (
                             <p className="muted">No replies yet.</p>
                           )}
@@ -3575,6 +4043,7 @@ function App() {
             </div>
           </div>
         ) : null}
+        {usernameModal}
       </div>
     )
   }
@@ -3824,7 +4293,7 @@ function App() {
                   </button>
                   {budgetGenerated ? (
                     <p className="panel-note success" role="status">
-                      Budget ready. Scroll down to see it.
+                      Budget ready. Open Budget Space to review.
                     </p>
                   ) : (
                     <p className="panel-note">You can edit everything later.</p>
@@ -4350,6 +4819,12 @@ function App() {
             >
               Copilot
             </button>
+            <button
+              className={activeView === 'concierge' ? 'tab active' : 'tab'}
+              onClick={() => setActiveView('concierge')}
+            >
+              Savings
+            </button>
             <button className="tab" onClick={() => window.location.assign(communityUrl)}>
               Community
             </button>
@@ -4430,11 +4905,65 @@ function App() {
 
           <div className="summary-grid">
             <div className="summary-card">
-              <span>Monthly income</span>
+              <div className="summary-title">
+                <span>Monthly income</span>
+                <button
+                  className="ghost small"
+                  type="button"
+                  onClick={() => setShowIncomeEditor((prev) => !prev)}
+                >
+                  {showIncomeEditor ? 'Done' : 'Edit'}
+                </button>
+              </div>
               <strong>{formatCurrency(monthlyIncome)}</strong>
               <small>
                 {payFrequencyLabel} pay x{multiplier}
               </small>
+              {showIncomeEditor ? (
+                <div className="summary-editor">
+                  <label>
+                    Take-home per paycheck
+                    <input
+                      type="number"
+                      value={incomePerPaycheck}
+                      onChange={(event) =>
+                        setIncomePerPaycheck(Number(event.target.value || 0))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Pay frequency
+                    <select
+                      value={payFrequency}
+                      onChange={(event) => setPayFrequency(event.target.value)}
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Every 2 weeks</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </label>
+                  <label className="toggle summary-toggle">
+                    <input
+                      type="checkbox"
+                      checked={includePartner}
+                      onChange={(event) => setIncludePartner(event.target.checked)}
+                    />
+                    <span>Include partner income</span>
+                  </label>
+                  {includePartner ? (
+                    <label>
+                      Partner monthly income
+                      <input
+                        type="number"
+                        value={partnerIncome}
+                        onChange={(event) =>
+                          setPartnerIncome(Number(event.target.value || 0))
+                        }
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <div className="summary-card">
               <span>Planned monthly bills</span>
@@ -5627,6 +6156,246 @@ function App() {
           </section>
         ) : null}
 
+        {activeView === 'concierge' ? (
+          <section className="copilot concierge">
+          <div className="section-head">
+            <div>
+              <h2>Savings Concierge</h2>
+              <p>
+                Build a savings playbook with scripts and next steps.
+              </p>
+            </div>
+            <span className="tag">Powered by Groq</span>
+          </div>
+          <div className="copilot-grid playbook-grid">
+            <div className="chat-card playbook-card">
+              <div className="card-head">
+                <h3>Build the playbook</h3>
+                <span className="tag">Guided</span>
+              </div>
+              <div className="playbook-stepper">
+                <button
+                  className={`playbook-step ${savingsStep === 'bill' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setSavingsStep('bill')}
+                >
+                  1. Pick bill
+                </button>
+                <button
+                  className={`playbook-step ${savingsStep === 'target' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setSavingsStep('target')}
+                >
+                  2. Target + method
+                </button>
+                <button
+                  className={`playbook-step ${savingsStep === 'plan' ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => setSavingsStep('plan')}
+                >
+                  3. Review plan
+                </button>
+              </div>
+              {savingsStep === 'bill' ? (
+                <div className="playbook-section">
+                  <label>
+                    Bill to target
+                    <select
+                      value={savingsBill}
+                      onChange={(event) => setSavingsBill(event.target.value)}
+                    >
+                      {savingsCandidates.length ? (
+                        savingsCandidates.map((item) => (
+                          <option key={`savings-${item.name}`} value={item.name}>
+                            {item.name} {item.amount ? `(${formatCurrency(item.amount)})` : ''}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">Add a bill first</option>
+                      )}
+                    </select>
+                  </label>
+                  {savingsCandidates.length ? (
+                    <>
+                      <div className="chip-grid">
+                        {savingsCandidates.slice(0, 6).map((item) => (
+                          <button
+                            key={`savings-chip-${item.name}`}
+                            type="button"
+                            className={savingsBill === item.name ? 'solid small' : 'ghost small'}
+                            onClick={() => setSavingsBill(item.name)}
+                          >
+                            {item.name}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="muted">
+                        Biggest bills rise to the top. Pick one to focus on first.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="muted">
+                      Add a monthly bill to unlock savings playbooks.
+                    </p>
+                  )}
+                  <div className="inline-actions">
+                    <button
+                      className="solid small"
+                      type="button"
+                      onClick={() => setSavingsStep('target')}
+                      disabled={!savingsCandidates.length}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {savingsStep === 'target' ? (
+                <div className="playbook-section">
+                  <div className="playbook-fields">
+                    <label>
+                      Target savings per month
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="25"
+                        value={savingsTarget}
+                        onChange={(event) => setSavingsTarget(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Contact method
+                      <select
+                        value={savingsMethod}
+                        onChange={(event) =>
+                          setSavingsMethod(
+                            event.target.value as 'phone' | 'chat' | 'email'
+                          )
+                        }
+                      >
+                        <option value="phone">Phone call</option>
+                        <option value="chat">Live chat</option>
+                        <option value="email">Email</option>
+                      </select>
+                    </label>
+                    <label>
+                      Provider or company
+                      <input
+                        type="text"
+                        placeholder="AT&T, Verizon, Gym"
+                        value={savingsProvider}
+                        onChange={(event) => setSavingsProvider(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Notes (optional)
+                      <input
+                        type="text"
+                        placeholder="Contract up in 2 months"
+                        value={savingsNotes}
+                        onChange={(event) => setSavingsNotes(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="inline-actions">
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => setSavingsStep('bill')}
+                    >
+                      Back
+                    </button>
+                    <button
+                      className="solid small"
+                      type="button"
+                      onClick={handleGenerateSavingsPlaybook}
+                      disabled={savingsLoading}
+                    >
+                      Generate playbook
+                    </button>
+                  </div>
+                  {selectedSavingsAmount ? (
+                    <p className="helper">
+                      Current bill: {formatCurrency(selectedSavingsAmount)} per month.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {savingsStep === 'plan' ? (
+                <div className="playbook-section">
+                  <p className="muted">
+                    Review the plan on the right. Adjust details and regenerate
+                    if needed.
+                  </p>
+                  <div className="inline-actions">
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => setSavingsStep('target')}
+                    >
+                      Edit details
+                    </button>
+                    <button
+                      className="solid small"
+                      type="button"
+                      onClick={handleGenerateSavingsPlaybook}
+                      disabled={savingsLoading}
+                    >
+                      Regenerate
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="suggestion-card playbook-output">
+              <h3>Playbook output</h3>
+              {savingsLoading ? (
+                <p className="muted">Drafting your savings plan...</p>
+              ) : savingsError ? (
+                <p className="muted">{savingsError}</p>
+              ) : savingsPlan ? (
+                <div className="playbook-output-body">{savingsPlan}</div>
+              ) : (
+                <p className="muted">
+                  Fill out the steps to generate a savings playbook.
+                </p>
+              )}
+              {savingsPendingUpdates ? (
+                <div className="playbook-actions">
+                  <p>{savingsPendingSummary}</p>
+                  <div className="inline-actions">
+                    <button
+                      className="solid small"
+                      onClick={() => {
+                        applyBudgetUpdates(savingsPendingUpdates)
+                        setSavingsPendingUpdates(null)
+                        setSavingsPendingSummary('')
+                        setSavingsPlan((prev) =>
+                          prev
+                            ? `${prev}\n\nUpdate: Savings adjustments applied.`
+                            : 'Savings adjustments applied.'
+                        )
+                      }}
+                    >
+                      Apply savings
+                    </button>
+                    <button
+                      className="ghost small"
+                      onClick={() => {
+                        setSavingsPendingUpdates(null)
+                        setSavingsPendingSummary('')
+                      }}
+                    >
+                      Keep current
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+          </section>
+        ) : null}
+
         {activeView === 'personalize' ? (
           <section className="personalize" ref={personalizeRef}>
           <div className="section-head">
@@ -5794,6 +6563,52 @@ function App() {
                   />
                 </label>
                 <p className="helper">Alerts pause while you are in the app.</p>
+              </div>
+            </div>
+            <div className="preferences-card">
+              <div className="card-head">
+                <h3>Community username</h3>
+                <span className="tag">Every 30 days</span>
+              </div>
+              <div className="preferences-form">
+                <label className="input-row">
+                  Username
+                  <input
+                    type="text"
+                    value={usernameDraft}
+                    onChange={(event) => {
+                      setUsernameDraft(event.target.value)
+                      if (usernameError) {
+                        setUsernameError('')
+                      }
+                    }}
+                    disabled={usernameChangeLocked}
+                  />
+                </label>
+                <p className="helper">
+                  {usernameError ||
+                    'Use 3-20 letters, numbers, or underscores. Update every 30 days.'}
+                </p>
+                {usernameChangeLocked && usernameNextChangeDate ? (
+                  <p className="helper">
+                    Next update in {usernameCooldownDays} day
+                    {usernameCooldownDays === 1 ? '' : 's'} (
+                    {formatLongDate(usernameNextChangeDate.toISOString())})
+                  </p>
+                ) : null}
+              </div>
+              <div className="preferences-footer">
+                <button
+                  className="solid small"
+                  onClick={handleUsernameSave}
+                  disabled={usernameSaving || usernameChangeLocked}
+                >
+                  {usernameSaving
+                    ? 'Saving...'
+                    : userProfile?.username
+                      ? 'Update username'
+                      : 'Save username'}
+                </button>
               </div>
             </div>
             <div className="preferences-card">
@@ -6237,6 +7052,7 @@ function App() {
           </div>
         </div>
       ) : null}
+      {usernameModal}
       {isBudgetTransitioning ? (
         <div className="budget-transition" role="status" aria-live="polite">
           <div className="budget-transition-card">
