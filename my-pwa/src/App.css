@@ -22,6 +22,8 @@
   top: -220px;
   background: radial-gradient(circle, rgba(99, 102, 241, 0.25), transparent 70%);
   opacity: 0.5;
+  animation: hero-float 20s ease-in-out infinite;
+  will-change: transform;
 }
 
 .hero::after {
@@ -33,6 +35,9 @@
   bottom: -220px;
   background: radial-gradient(circle, rgba(14, 165, 233, 0.18), transparent 70%);
   opacity: 0.6;
+  animation: hero-float 24s ease-in-out infinite;
+  animation-delay: -6s;
+  will-change: transform;
 }
 
 .hero > * {
@@ -412,12 +417,17 @@ main {
 }
 
 .view-switcher {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.92);
   border-radius: 20px;
   padding: 1rem;
   box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
   display: grid;
   gap: 0.6rem;
+  position: sticky;
+  top: 1rem;
+  z-index: 6;
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-soft);
 }
 
 .tab-row {
@@ -990,4 +1000,14 @@ main {
   background: #0f172a;
   color: #fff;
   border-color: #0f172a;
+}
+
+@keyframes hero-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(14px, -10px, 0);
+  }
 }

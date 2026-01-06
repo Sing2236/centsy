@@ -105,6 +105,15 @@ type MarketingView =
   | 'privacy'
   | 'app'
 
+type AppView =
+  | 'workspace'
+  | 'cashflow'
+  | 'spend'
+  | 'planner'
+  | 'invest'
+  | 'copilot'
+  | 'personalize'
+
 const categoriesSeed = [
   { name: 'Rent', planned: 1200, actual: 1200 },
   { name: 'Groceries', planned: 420, actual: 368 },
@@ -438,17 +447,12 @@ function App() {
     category: '',
   })
   const [newComment, setNewComment] = useState<Record<string, string>>({})
-  const [activeView, setActiveView] = useState<
-    | 'workspace'
-    | 'cashflow'
-    | 'spend'
-    | 'planner'
-    | 'invest'
-    | 'copilot'
-    | 'personalize'
-  >('workspace')
+  const [activeView, setActiveView] = useState<AppView>('workspace')
   const [categoryRange, setCategoryRange] = useState({ min: 0, max: 3000 })
+  const [onboardingCollapsed, setOnboardingCollapsed] = useState(false)
   const currentYear = new Date().getFullYear()
+  const showSetupGuide = !budgetGenerated && !onboardingCollapsed
+  const showLegacySteps = !budgetGenerated && !showSetupGuide
 
   const basePath =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/centsy')
@@ -473,6 +477,8 @@ function App() {
   const builderRef = useRef<HTMLDivElement | null>(null)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const plannerRef = useRef<HTMLDivElement | null>(null)
+  const personalizeRef = useRef<HTMLDivElement | null>(null)
+  const hasAutoDirected = useRef(false)
   const saveTimer = useRef<number | null>(null)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [isHydrating, setIsHydrating] = useState(false)
@@ -538,7 +544,12 @@ function App() {
     return param ? `${basePath}/?view=${param}` : `${basePath}/`
   }
 
-  const handleMarketingNav = (view: MarketingView) => {
+  const getDefaultAppView = () => (budgetGenerated ? 'workspace' : 'personalize')
+
+  const handleMarketingNav = (
+    view: MarketingView,
+    options?: { appView?: AppView }
+  ) => {
     setMarketingView(view)
     setIsNavOpen(false)
     if (typeof window !== 'undefined') {
@@ -546,9 +557,22 @@ function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
     if (view === 'app') {
-      setActiveView('workspace')
+      setActiveView(options?.appView ?? getDefaultAppView())
     }
   }
+
+  useEffect(() => {
+    if (marketingView !== 'app') return
+    if (!budgetGenerated && !hasAutoDirected.current) {
+      setActiveView('personalize')
+      hasAutoDirected.current = true
+      return
+    }
+    if (budgetGenerated && hasAutoDirected.current && activeView === 'personalize') {
+      setActiveView('workspace')
+      hasAutoDirected.current = false
+    }
+  }, [marketingView, budgetGenerated, activeView])
 
   const currentBudgetState = useMemo<BudgetState>(
     () => ({
@@ -618,6 +642,19 @@ function App() {
     showToast(message)
     setShowLogin(true)
     return false
+  }
+
+  const openBudgetSpace = (appView?: AppView) => {
+    if (!requireLogin('Please log in to open Budget Space.')) {
+      return
+    }
+    handleMarketingNav('app', { appView: appView ?? getDefaultAppView() })
+    if (!budgetGenerated) {
+      setOnboardingCollapsed(false)
+      showToast('Start with your pay details, then build your budget.')
+      return
+    }
+    showToast('Budget Space opened.')
   }
 
   const scrollTo = (ref: { current: HTMLDivElement | null }) => {
@@ -3632,16 +3669,7 @@ function App() {
                 {saveState === 'saving' ? 'Saving...' : 'All changes saved'}
               </span>
             ) : null}
-            <button
-              className="solid"
-              onClick={() => {
-                if (!requireLogin('Please log in to open Budget Space.')) {
-                  return
-                }
-                handleMarketingNav('app')
-                showToast('Budget Space opened.')
-              }}
-            >
+            <button className="solid" onClick={() => openBudgetSpace()}>
               Budget Space
             </button>
           </div>
@@ -3657,16 +3685,7 @@ function App() {
               as you go. See how each bill changes your weekly cash.
             </p>
             <div className="hero-cta">
-              <button
-                className="solid"
-                onClick={() => {
-                  if (!requireLogin('Please log in to open Budget Space.')) {
-                    return
-                  }
-                  handleMarketingNav('app')
-                  showToast('Budget Space opened.')
-                }}
-              >
+              <button className="solid" onClick={() => openBudgetSpace()}>
                 Budget Space
               </button>
               <button
@@ -4195,6 +4214,110 @@ function App() {
         ) : null}
         {marketingView === 'app' && userEmail ? (
           <>
+        {showSetupGuide ? (
+          <section className="setup-banner">
+            <div className="setup-header">
+              <div>
+                <span className="tag">First-time flow</span>
+                <h2>Build your budget in a few guided steps.</h2>
+                <p>
+                  Start with pay details, confirm bills, then schedule dates and log
+                  a first spend.
+                </p>
+              </div>
+              <div className="setup-actions">
+                <button
+                  className="ghost small"
+                  type="button"
+                  onClick={() => setOnboardingCollapsed(true)}
+                >
+                  Hide guide
+                </button>
+                <button
+                  className="solid small"
+                  type="button"
+                  onClick={() => {
+                    setActiveView('personalize')
+                    scrollTo(personalizeRef)
+                  }}
+                >
+                  Start setup
+                </button>
+              </div>
+            </div>
+            <div className="setup-grid">
+              <button
+                className="setup-step"
+                type="button"
+                onClick={() => {
+                  setActiveView('personalize')
+                  scrollTo(personalizeRef)
+                }}
+              >
+                <strong>1. Set pay + goals</strong>
+                <span>Update income, pay timing, and your goal focus.</span>
+              </button>
+              <button
+                className="setup-step"
+                type="button"
+                onClick={() => {
+                  setActiveView('workspace')
+                  setShowCategoryForm(true)
+                  scrollTo(workspaceRef)
+                  showToast('Add your monthly bills.')
+                }}
+              >
+                <strong>2. Confirm monthly bills</strong>
+                <span>Add or edit bills so cash flow stays accurate.</span>
+              </button>
+              <button
+                className="setup-step"
+                type="button"
+                onClick={() => {
+                  setActiveView('planner')
+                  setActivePanel('schedule')
+                  scrollTo(plannerRef)
+                  showToast('Schedule your bill dates.')
+                }}
+              >
+                <strong>3. Schedule bill dates</strong>
+                <span>Assign due dates so weekly cash flow is real.</span>
+              </button>
+              <button
+                className="setup-step"
+                type="button"
+                onClick={() => {
+                  setActiveView('spend')
+                  showToast('Log your first spend.')
+                }}
+              >
+                <strong>4. Log a first spend</strong>
+                <span>Track a purchase to see live rollups.</span>
+              </button>
+            </div>
+            <div className="setup-footer">
+              <p className="muted">
+                Prefer guidance? Copilot can add bills, goals, and spends for you.
+              </p>
+              <div className="setup-actions">
+                <button
+                  className="ghost small"
+                  type="button"
+                  onClick={() => setActiveView('copilot')}
+                >
+                  Open Copilot
+                </button>
+                <button
+                  className="solid small"
+                  type="button"
+                  onClick={handleGenerateBudget}
+                >
+                  Generate budget
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
         <section className="view-switcher">
           <div className="tab-row">
             <button
@@ -4237,34 +4360,54 @@ function App() {
               Preferences
             </button>
           </div>
-          <p className="muted">Use tabs to focus on one area at a time.</p>
-        </section>
-        <section className="how-section">
-          <div className="section-head">
-            <div>
-              <h2>Make a budget in 4 simple steps</h2>
-              <p>We guide you first. After that, you can edit everything.</p>
+          {showSetupGuide ? (
+            <p className="muted">
+              Follow the setup guide above, then use tabs to focus on one area.
+            </p>
+          ) : !budgetGenerated ? (
+            <div className="setup-inline">
+              <span className="tag">Setup</span>
+              <span>Need the quick-start guide?</span>
+              <button
+                className="ghost small"
+                type="button"
+                onClick={() => setOnboardingCollapsed(false)}
+              >
+                Show guide
+              </button>
             </div>
-          </div>
-          <div className="step-grid">
-            <article>
-              <h3>1. Add income</h3>
-              <p>Start with your take-home pay.</p>
-            </article>
-            <article>
-              <h3>2. Pick bill templates</h3>
-              <p>Use ready-made bills or add your own.</p>
-            </article>
-            <article>
-              <h3>3. Plan monthly bills</h3>
-              <p>Add due dates to see weekly cash flow.</p>
-            </article>
-            <article>
-              <h3>4. Track gently</h3>
-              <p>Track spending and adjust as you go.</p>
-            </article>
-          </div>
+          ) : (
+            <p className="muted">Use tabs to focus on one area at a time.</p>
+          )}
         </section>
+        {showLegacySteps ? (
+          <section className="how-section">
+            <div className="section-head">
+              <div>
+                <h2>Make a budget in 4 simple steps</h2>
+                <p>We guide you first. After that, you can edit everything.</p>
+              </div>
+            </div>
+            <div className="step-grid">
+              <article>
+                <h3>1. Add income</h3>
+                <p>Start with your take-home pay.</p>
+              </article>
+              <article>
+                <h3>2. Pick bill templates</h3>
+                <p>Use ready-made bills or add your own.</p>
+              </article>
+              <article>
+                <h3>3. Plan monthly bills</h3>
+                <p>Add due dates to see weekly cash flow.</p>
+              </article>
+              <article>
+                <h3>4. Track gently</h3>
+                <p>Track spending and adjust as you go.</p>
+              </article>
+            </div>
+          </section>
+        ) : null}
 
         {activeView === 'workspace' ? (
           <section className="workspace" ref={workspaceRef}>
@@ -5485,7 +5628,7 @@ function App() {
         ) : null}
 
         {activeView === 'personalize' ? (
-          <section className="personalize">
+          <section className="personalize" ref={personalizeRef}>
           <div className="section-head">
             <div>
               <h2>Set your preferences</h2>
@@ -5707,10 +5850,10 @@ function App() {
           </section>
         ) : null}
 
-        <section className="cta">
+        <section className="cta app-cta">
           <div>
-            <h2>Ready to start?</h2>
-            <p>We give you a draft, then you make it yours.</p>
+            <h2>Quick actions</h2>
+            <p>Export your budget or re-run the builder anytime.</p>
           </div>
           <div className="cta-actions">
             <button className="ghost" onClick={handleExportCsv}>
