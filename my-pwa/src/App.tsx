@@ -54,6 +54,21 @@ type SpendDraft = {
   isRefund?: boolean
 }
 
+type SpendCompleteResult = {
+  type: 'complete'
+  entry: SpendEntry
+  summary: string
+}
+
+type SpendDraftResult = {
+  type: 'draft'
+  missingAmount: boolean
+  missingCategory: boolean
+  draft: SpendDraft
+}
+
+type ParsedSpend = SpendCompleteResult | SpendDraftResult
+
 type BudgetState = {
   incomePerPaycheck: number
   partnerIncome: number
@@ -1886,7 +1901,7 @@ function App() {
     return next
   }
 
-  const buildSpendEntry = (draft: SpendDraft) => {
+  const buildSpendEntry = (draft: SpendDraft): SpendCompleteResult | null => {
     if (!draft.amount || !draft.category) {
       return null
     }
@@ -1904,10 +1919,10 @@ function App() {
     const summary = draft.isRefund
       ? `Add refund of ${formatCurrency(Math.abs(signedAmount))} to ${draft.category}?`
       : `Add ${formatCurrency(Math.abs(signedAmount))} spend to ${draft.category}?`
-    return { entry, summary }
+    return { type: 'complete', entry, summary }
   }
 
-  const parseSpendFromText = (text: string) => {
+  const parseSpendFromText = (text: string): ParsedSpend | null => {
     const lower = text.toLowerCase()
     const amount = parseSpendAmount(text)
     const spendIntent =
@@ -1931,7 +1946,7 @@ function App() {
       if (detectedDate.explicit) {
         draft.date = detectedDate.date
       }
-      return { missingAmount: !amount, missingCategory: !category, draft }
+      return { type: 'draft', missingAmount: !amount, missingCategory: !category, draft }
     }
     return buildSpendEntry({
       amount,
@@ -2108,7 +2123,7 @@ function App() {
 
     const parsedSpend = parseSpendFromText(userMessage)
     if (parsedSpend) {
-      if ('entry' in parsedSpend && parsedSpend.entry) {
+      if (parsedSpend.type === 'complete') {
         setPendingSpendDraft(null)
         const nextEntries = [parsedSpend.entry, ...spendEntries]
         setPendingUpdates({ spendEntries: nextEntries })
