@@ -1231,6 +1231,26 @@ function App() {
     setLoginPassword('')
   }
 
+  const handlePasswordReset = async () => {
+    const email = loginEmail.trim()
+    if (!email) {
+      showToast('Enter your email to reset your password.')
+      return
+    }
+    setAuthLoading(true)
+    const redirectTo =
+      typeof window !== 'undefined' ? `${window.location.origin}/?view=app` : undefined
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    })
+    if (error) {
+      showToast(error.message)
+    } else {
+      showToast('Check your email for a reset link.')
+    }
+    setAuthLoading(false)
+  }
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
     setSaveState('idle')
@@ -4028,6 +4048,16 @@ function App() {
                     onChange={(event) => setLoginPassword(event.target.value)}
                   />
                 </label>
+                {authMode === 'login' ? (
+                  <button
+                    className="ghost small"
+                    type="button"
+                    onClick={handlePasswordReset}
+                    disabled={authLoading}
+                  >
+                    Forgot password?
+                  </button>
+                ) : null}
               </div>
               <button
                 className="solid"
@@ -7037,6 +7067,16 @@ function App() {
                 onChange={(event) => setLoginPassword(event.target.value)}
               />
             </label>
+            {authMode === 'login' ? (
+              <button
+                className="ghost small"
+                type="button"
+                onClick={handlePasswordReset}
+                disabled={authLoading}
+              >
+                Forgot password?
+              </button>
+            ) : null}
             <button className="solid" onClick={handleLogin} disabled={authLoading}>
               {authLoading
                 ? 'Working...'
