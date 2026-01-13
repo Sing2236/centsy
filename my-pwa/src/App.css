@@ -169,6 +169,84 @@
   flex-wrap: wrap;
 }
 
+.hero-waitlist {
+  display: grid;
+  gap: 0.7rem;
+  margin: 1.7rem 0 2rem;
+  max-width: 28rem;
+  position: relative;
+}
+
+.waitlist-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.waitlist-field input {
+  padding: 0.75rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.waitlist-status {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #0f766e;
+}
+
+.waitlist-status.error {
+  color: #b91c1c;
+}
+
+.confetti {
+  position: absolute;
+  inset: -8px 0 auto 0;
+  pointer-events: none;
+  display: block;
+  height: 0;
+}
+
+.confetti span {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti-fall 1.2s ease-in-out forwards;
+}
+
+.confetti span:nth-child(1) { left: 5%; background: #f97316; animation-delay: 0s; }
+.confetti span:nth-child(2) { left: 12%; background: #0ea5e9; animation-delay: 0.1s; }
+.confetti span:nth-child(3) { left: 20%; background: #14b8a6; animation-delay: 0.05s; }
+.confetti span:nth-child(4) { left: 28%; background: #f59e0b; animation-delay: 0.15s; }
+.confetti span:nth-child(5) { left: 36%; background: #38bdf8; animation-delay: 0.08s; }
+.confetti span:nth-child(6) { left: 44%; background: #22c55e; animation-delay: 0.12s; }
+.confetti span:nth-child(7) { left: 52%; background: #fb7185; animation-delay: 0.18s; }
+.confetti span:nth-child(8) { left: 60%; background: #f97316; animation-delay: 0.06s; }
+.confetti span:nth-child(9) { left: 68%; background: #0ea5e9; animation-delay: 0.2s; }
+.confetti span:nth-child(10) { left: 76%; background: #14b8a6; animation-delay: 0.1s; }
+.confetti span:nth-child(11) { left: 84%; background: #f59e0b; animation-delay: 0.16s; }
+.confetti span:nth-child(12) { left: 92%; background: #38bdf8; animation-delay: 0.04s; }
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(80px) rotate(220deg);
+    opacity: 0;
+  }
+}
+
 .hero-note {
   margin: 0 0 1.5rem;
   font-size: 0.9rem;
@@ -381,6 +459,10 @@ main {
 
   .hero-grid {
     gap: 2.2rem;
+  }
+
+  .waitlist-field {
+    grid-template-columns: 1fr;
   }
 
   .stat-row > div {

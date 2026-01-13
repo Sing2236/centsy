@@ -110,6 +110,7 @@ type MarketingView =
   | 'features'
   | 'about'
   | 'dev-notes'
+  | 'investors'
   | 'terms'
   | 'privacy'
   | 'app'
@@ -232,6 +233,8 @@ const marketingViewFromParam = (value: string | null): MarketingView => {
       return 'about'
     case 'dev-notes':
       return 'dev-notes'
+    case 'investors':
+      return 'investors'
     case 'updates':
       return 'dev-notes'
     case 'terms':
@@ -253,6 +256,8 @@ const marketingViewToParam = (view: MarketingView) => {
       return 'about'
     case 'dev-notes':
       return 'updates'
+    case 'investors':
+      return 'investors'
     case 'terms':
       return 'terms'
     case 'privacy':
@@ -584,6 +589,12 @@ function App() {
     'due'
   )
   const [allocationOrder, setAllocationOrder] = useState<string[]>([])
+  const [waitlistEmail, setWaitlistEmail] = useState('')
+  const [waitlistStatus, setWaitlistStatus] = useState<
+    'idle' | 'success' | 'error'
+  >('idle')
+  const [waitlistMessage, setWaitlistMessage] = useState('')
+  const [waitlistLoading, setWaitlistLoading] = useState(false)
   const [carouselIndex, setCarouselIndex] = useState(0)
   const [forumPosts, setForumPosts] = useState<ForumPost[]>([])
   const [forumComments, setForumComments] = useState<
@@ -2115,6 +2126,48 @@ function App() {
     })
   }
 
+  const handleWaitlistSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const email = waitlistEmail.trim().toLowerCase()
+    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    if (!isValid) {
+      setWaitlistStatus('error')
+      setWaitlistMessage('Enter a valid email to join the waitlist.')
+      return
+    }
+    setWaitlistLoading(true)
+    setWaitlistStatus('idle')
+    setWaitlistMessage('')
+    try {
+      const { error } = await supabase.from('waitlist_signups').insert({
+        email,
+        source: 'landing',
+        created_at: new Date().toISOString(),
+      })
+      if (error) {
+        const message = error.message.toLowerCase()
+        if (message.includes('duplicate') || message.includes('unique')) {
+          setWaitlistStatus('success')
+          setWaitlistMessage('This user is already signed up.')
+        } else {
+          setWaitlistStatus('error')
+          setWaitlistMessage('Waitlist signup failed. Try again soon.')
+        }
+      } else {
+        setWaitlistStatus('success')
+        setWaitlistMessage('You are on the list. Watch your inbox for updates.')
+        setWaitlistEmail('')
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Waitlist signup failed.'
+      setWaitlistStatus('error')
+      setWaitlistMessage(message)
+    } finally {
+      setWaitlistLoading(false)
+    }
+  }
+
   const getLocalCopilotAction = (message: string) => {
     const text = message.toLowerCase()
     const isNegated =
@@ -3332,6 +3385,12 @@ function App() {
   }, [userId])
 
   useEffect(() => {
+    if (marketingView !== 'investors') return
+    if (typeof window === 'undefined') return
+    window.location.assign('/investor-deck/slides.html')
+  }, [marketingView])
+
+  useEffect(() => {
     if (!userId || isHydrating) return
     if (!autoSaveEnabled) {
       if (saveTimer.current) {
@@ -4429,21 +4488,50 @@ function App() {
               Answer a few questions, get a complete AI-guided budget, then edit
               as you go. See how each bill changes your weekly cash.
             </p>
-            <div className="hero-cta">
-              <button className="solid" onClick={() => openBudgetSpace()}>
-                Budget Space
-              </button>
-              <button
-                className="ghost"
-                type="button"
-                onClick={() => handleMarketingNav('features')}
-              >
-                See how it works
-              </button>
-            </div>
-            <p className="hero-note">
-              Private by default. Export anytime. No spreadsheets required.
-            </p>
+            <form className="hero-waitlist" onSubmit={handleWaitlistSubmit}>
+              <div className="waitlist-field">
+                <input
+                  type="email"
+                  placeholder="you@email.com"
+                  value={waitlistEmail}
+                  onChange={(event) => setWaitlistEmail(event.target.value)}
+                  aria-label="Email address"
+                />
+                <button className="solid" type="submit" disabled={waitlistLoading}>
+                  {waitlistLoading ? 'Joining...' : 'Join the waitlist'}
+                </button>
+              </div>
+              <p className="hero-note">
+                One clear next step. Get a short email series with setup tips and
+                early access.
+              </p>
+              {waitlistMessage ? (
+                <p
+                  className={`waitlist-status ${
+                    waitlistStatus === 'error' ? 'error' : 'success'
+                  }`}
+                  role="status"
+                >
+                  {waitlistMessage}
+                </p>
+              ) : null}
+              {waitlistStatus === 'success' ? (
+                <div className="confetti" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              ) : null}
+            </form>
             <div className="stat-row">
               <div>
                 <strong>6 min</strong>
@@ -4821,6 +4909,40 @@ function App() {
               >
                 Back to home
               </a>
+            </div>
+          </section>
+        ) : null}
+        {marketingView === 'investors' ? (
+          <section className="investor-deck">
+            <div className="section-head">
+              <div>
+                <h2>Investor deck</h2>
+                <p>Private preview deck for investors.</p>
+              </div>
+              <a className="ghost" href={marketingUrlFor('home')}>
+                Back to home
+              </a>
+            </div>
+            <div className="deck-grid">
+              {Array.from({ length: 11 }).map((_, index) => {
+                const slideNumber = String(index + 1).padStart(2, '0')
+                return (
+                  <a
+                    className="deck-slide"
+                    key={`investor-slide-${slideNumber}`}
+                    href={`/investor-deck/slide-${slideNumber}.png`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <img
+                      src={`/investor-deck/slide-${slideNumber}.png`}
+                      alt={`Investor deck slide ${slideNumber}`}
+                      loading="lazy"
+                    />
+                    <span>Slide {slideNumber}</span>
+                  </a>
+                )
+              })}
             </div>
           </section>
         ) : null}
