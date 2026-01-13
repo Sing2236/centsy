@@ -83,6 +83,8 @@ type BudgetState = {
   primaryGoal: string
   autoSuggest: boolean
   includePartner: boolean
+  bankBalance: number
+  payDates: string[]
   monthlyBuffer: number
   notificationWeeklySummary: boolean
   notificationOverBudget: boolean
@@ -117,6 +119,7 @@ type AppView =
   | 'cashflow'
   | 'spend'
   | 'planner'
+  | 'insights'
   | 'invest'
   | 'copilot'
   | 'concierge'
@@ -153,10 +156,17 @@ const usernamePattern = /^[A-Za-z0-9_]{3,20}$/
 const devNotesSeed = [
   {
     title: 'Community usernames + Savings Concierge fixes',
-    date: 'Mar 10, 2026',
+    date: 'Jan 02, 2026',
     summary:
       'Username onboarding now prompts on first login, posts/replies show @names, and usernames are editable every 30 days in Preferences. Savings Concierge output now renders reliably and strips stray JSON fields.',
     tag: 'Community',
+  },
+  {
+    title: 'AI Insights + paycheck planning',
+    date: 'Jan 12, 2026',
+    summary:
+      'AI Insights now includes a risk score, bill-by-bill paycheck allocations, and a bank balance input that updates guidance instantly. Added pay date tracking so biweekly and monthly paychecks map cleanly into planning.',
+    tag: 'Insights',
   },
   {
     title: 'Copilot removals tightened',
@@ -316,6 +326,14 @@ const billWeekIndex = (dateLabel: string, recurringDay?: number | null) => {
   return 1
 }
 
+const billDueDay = (bill: { date: string; recurringDay?: number | null }) => {
+  if (bill.recurringDay && !Number.isNaN(bill.recurringDay)) {
+    return Math.min(31, Math.max(1, bill.recurringDay))
+  }
+  const extracted = extractDayFromLabel(bill.date)
+  return extracted ?? 99
+}
+
 const formatDateForInput = (dateLabel: string) => {
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateLabel)) {
     return dateLabel
@@ -338,6 +356,47 @@ const extractDayFromLabel = (dateLabel: string) => {
 
 const formatBillDateLabel = (bill: { date: string; recurringDay?: number | null }) =>
   bill.recurringDay ? `Monthly on ${bill.recurringDay}` : bill.date
+
+const buildPaycheckGuidance = (options: {
+  bankBalance: number
+  bankBalanceAfterBills: number
+  billsPerPaycheck: number
+  nextPaycheckAfterBills: number
+  nextPaycheckTotal: number
+  payFrequencyLabel: string
+  leftToBudget: number
+  dailyFlexTarget: number
+  weeklyFlexTarget: number
+}) => {
+  const items: string[] = []
+  if (!options.bankBalance) {
+    items.push('Add your bank balance for more accurate paycheck guidance.')
+  } else if (options.bankBalanceAfterBills < 0) {
+    items.push(
+      `You are short ${formatCurrency(Math.abs(options.bankBalanceAfterBills))} for monthly bills.`
+    )
+  } else {
+    items.push(
+      `You can cover monthly bills with ${formatCurrency(options.bankBalanceAfterBills)} left.`
+    )
+  }
+  if (options.nextPaycheckTotal > 0) {
+    items.push(
+      `Set aside about ${formatCurrency(options.billsPerPaycheck)} from your next ${options.payFrequencyLabel.toLowerCase()} paycheck for bills.`
+    )
+    items.push(
+      options.nextPaycheckAfterBills < 0
+        ? `Your next paycheck is short ${formatCurrency(Math.abs(options.nextPaycheckAfterBills))} after bills.`
+        : `You will have about ${formatCurrency(options.nextPaycheckAfterBills)} from your next paycheck for goals and spending.`
+    )
+  }
+  items.push(
+    options.leftToBudget < 0
+      ? `Your plan is over budget by ${formatCurrency(Math.abs(options.leftToBudget))}. Reduce bills or boost income.`
+      : `Aim for ${formatCurrency(options.dailyFlexTarget)} per day or ${formatCurrency(options.weeklyFlexTarget)} per week of flexible spend.`
+  )
+  return items
+}
 
 const formatShortDate = (value: string) => {
   if (!value) return ''
@@ -435,6 +494,9 @@ function App() {
   const [primaryGoal, setPrimaryGoal] = useState('stability')
   const [autoSuggest, setAutoSuggest] = useState(true)
   const [includePartner, setIncludePartner] = useState(false)
+  const [bankBalance, setBankBalance] = useState(0)
+  const [showBankBalanceEditor, setShowBankBalanceEditor] = useState(false)
+  const [payDates, setPayDates] = useState<string[]>([''])
   const [monthlyBuffer, setMonthlyBuffer] = useState(150)
   const [notificationWeeklySummary, setNotificationWeeklySummary] = useState(true)
   const [notificationOverBudget, setNotificationOverBudget] = useState(true)
@@ -518,6 +580,10 @@ function App() {
     >
   } | null>(null)
   const [pendingSummary, setPendingSummary] = useState('')
+  const [allocationSortMode, setAllocationSortMode] = useState<'due' | 'custom'>(
+    'due'
+  )
+  const [allocationOrder, setAllocationOrder] = useState<string[]>([])
   const [carouselIndex, setCarouselIndex] = useState(0)
   const [forumPosts, setForumPosts] = useState<ForumPost[]>([])
   const [forumComments, setForumComments] = useState<
@@ -731,6 +797,8 @@ function App() {
       primaryGoal,
       autoSuggest,
       includePartner,
+      bankBalance,
+      payDates,
       monthlyBuffer,
       notificationWeeklySummary,
       notificationOverBudget,
@@ -757,6 +825,8 @@ function App() {
       primaryGoal,
       autoSuggest,
       includePartner,
+      bankBalance,
+      payDates,
       monthlyBuffer,
       notificationWeeklySummary,
       notificationOverBudget,
@@ -801,6 +871,17 @@ function App() {
       setSavingsBill(savingsCandidates[0].name)
     }
   }, [savingsBill, savingsCandidates])
+
+  useEffect(() => {
+    const targetCount = payFrequency === 'biweekly' ? 2 : 1
+    setPayDates((prev) => {
+      const trimmed = prev.slice(0, targetCount)
+      if (trimmed.length < targetCount) {
+        return [...trimmed, ...Array.from({ length: targetCount - trimmed.length }, () => '')]
+      }
+      return trimmed
+    })
+  }, [payFrequency])
 
   const showToast = (message: string) => {
     setToast(message)
@@ -1788,6 +1869,12 @@ function App() {
     if ('includePartner' in updates && updates.includePartner !== undefined) {
       setIncludePartner(updates.includePartner)
     }
+    if ('bankBalance' in updates && updates.bankBalance !== undefined) {
+      setBankBalance(Number(updates.bankBalance))
+    }
+    if ('payDates' in updates && Array.isArray(updates.payDates)) {
+      setPayDates(updates.payDates.map((date) => String(date ?? '')).slice(0, 2))
+    }
     if ('monthlyBuffer' in updates && updates.monthlyBuffer !== undefined) {
       setMonthlyBuffer(Number(updates.monthlyBuffer))
     }
@@ -1947,6 +2034,8 @@ function App() {
       setPrimaryGoal('stability')
       setAutoSuggest(true)
       setIncludePartner(false)
+      setBankBalance(0)
+      setPayDates([''])
       setMonthlyBuffer(150)
       setNotificationWeeklySummary(true)
       setNotificationOverBudget(true)
@@ -2011,6 +2100,19 @@ function App() {
         content: 'Changes applied.',
       },
     ])
+  }
+
+  const moveAllocation = (id: string, direction: 'up' | 'down') => {
+    setAllocationSortMode('custom')
+    setAllocationOrder((prev) => {
+      const index = prev.indexOf(id)
+      if (index === -1) return prev
+      const next = [...prev]
+      const swapWith = direction === 'up' ? index - 1 : index + 1
+      if (swapWith < 0 || swapWith >= next.length) return prev
+      ;[next[index], next[swapWith]] = [next[swapWith], next[index]]
+      return next
+    })
   }
 
   const getLocalCopilotAction = (message: string) => {
@@ -3070,7 +3172,15 @@ function App() {
     rows.push(['Summary'])
     rows.push(['Metric', 'Value'])
     rows.push(['Monthly income', formatCurrency(monthlyIncome)])
+    rows.push(['Bank balance', formatCurrency(bankBalance)])
+    rows.push(['Bank balance after bills', formatCurrency(bankBalanceAfterBills)])
+    rows.push([
+      'Bills covered (months)',
+      plannedBillsDisplayTotal > 0 ? bankCoverageMonths.toFixed(2) : '—',
+    ])
     rows.push(['Planned monthly bills', formatCurrency(plannedBillsDisplayTotal)])
+    rows.push(['Bills per paycheck', formatCurrency(billsPerPaycheck)])
+    rows.push(['Next paycheck after bills', formatCurrency(nextPaycheckAfterBills)])
     rows.push(['Savings + debt', formatCurrency(savingsDebtTotal)])
     rows.push(['Left to budget', formatCurrency(leftToBudget)])
     rows.push([])
@@ -3137,6 +3247,7 @@ function App() {
 
     rows.push(['Preferences'])
     rows.push(['Pay frequency', payFrequencyLabel])
+    rows.push(['Pay dates', payDates.filter(Boolean).join(' | ') || '—'])
     rows.push(['Primary goal', primaryGoal])
     rows.push(['Auto-suggest bills', autoSuggest ? 'Yes' : 'No'])
     rows.push(['Include partner income', includePartner ? 'Yes' : 'No'])
@@ -3193,6 +3304,8 @@ function App() {
         setPrimaryGoal(saved.primaryGoal ?? 'stability')
         setAutoSuggest(saved.autoSuggest ?? true)
         setIncludePartner(saved.includePartner ?? false)
+        setBankBalance(saved.bankBalance ?? 0)
+        setPayDates(saved.payDates ?? [''])
         setMonthlyBuffer(saved.monthlyBuffer ?? 150)
         setNotificationWeeklySummary(saved.notificationWeeklySummary ?? true)
         setNotificationOverBudget(saved.notificationOverBudget ?? true)
@@ -3423,6 +3536,120 @@ function App() {
     plannedCategoryTotal -
     monthlyInvestment -
     safetyBuffer
+  const effectiveMultiplier = Math.max(1, multiplier)
+  const bankBalanceAfterBills = bankBalance - plannedBillsDisplayTotal
+  const bankCoverageMonths =
+    plannedBillsDisplayTotal > 0 ? bankBalance / plannedBillsDisplayTotal : 0
+  const bankCoverageLabel =
+    plannedBillsDisplayTotal > 0 ? `${bankCoverageMonths.toFixed(1)} months` : '—'
+  const nextPaycheckTotal =
+    incomePerPaycheck + (includePartner ? partnerIncome / effectiveMultiplier : 0)
+  const billsPerPaycheck = plannedBillsDisplayTotal / effectiveMultiplier
+  const nextPaycheckAfterBills = nextPaycheckTotal - billsPerPaycheck
+  const dailyFlexTarget = leftToBudget / 30
+  const weeklyFlexTarget = leftToBudget / 4
+  const billAllocations = scheduledBills.map((bill) => ({
+    ...bill,
+    allocation:
+      plannedBillsDisplayTotal > 0
+        ? (bill.amount / plannedBillsDisplayTotal) * nextPaycheckTotal
+        : 0,
+  }))
+  const allocationItems = billAllocations.map((bill, index) => ({
+    ...bill,
+    id: `${index}-${bill.name}`,
+    dueDay: billDueDay(bill),
+    dueLabel: formatBillDateLabel(bill),
+  }))
+  useEffect(() => {
+    if (!allocationItems.length) {
+      setAllocationOrder([])
+      return
+    }
+    setAllocationOrder((prev) => {
+      const currentIds = new Set(allocationItems.map((item) => item.id))
+      const retained = prev.filter((id) => currentIds.has(id))
+      const missing = allocationItems
+        .filter((item) => !retained.includes(item.id))
+        .sort((a, b) => a.dueDay - b.dueDay)
+        .map((item) => item.id)
+      if (retained.length === prev.length && missing.length === 0) {
+        return prev
+      }
+      return [...retained, ...missing]
+    })
+  }, [allocationItems])
+  const orderedAllocations = useMemo(() => {
+    if (allocationSortMode === 'custom' && allocationOrder.length) {
+      const lookup = new Map(allocationItems.map((item) => [item.id, item]))
+      const ordered = allocationOrder
+        .map((id) => lookup.get(id))
+        .filter((item): item is (typeof allocationItems)[number] => Boolean(item))
+      const missing = allocationItems.filter(
+        (item) => !allocationOrder.includes(item.id)
+      )
+      return [...ordered, ...missing]
+    }
+    return [...allocationItems].sort((a, b) => {
+      if (a.dueDay !== b.dueDay) return a.dueDay - b.dueDay
+      return a.name.localeCompare(b.name)
+    })
+  }, [allocationItems, allocationOrder, allocationSortMode])
+  const riskScore = (() => {
+    let score = 100
+    if (plannedBillsDisplayTotal > monthlyIncome) score -= 20
+    if (leftToBudget < 0) score -= 20
+    if (bankBalanceAfterBills < 0) score -= 20
+    if (bankCoverageMonths < 0.5) score -= 15
+    if (bankCoverageMonths < 1) score -= 10
+    if (spendVariance > 0) score -= 10
+    return Math.min(100, Math.max(5, Math.round(score)))
+  })()
+  const riskLabel =
+    riskScore >= 80
+      ? 'Low risk'
+      : riskScore >= 60
+        ? 'Watch list'
+        : riskScore >= 40
+          ? 'Elevated risk'
+          : 'High risk'
+  const payFrequencyLabel =
+    payFrequency === 'weekly'
+      ? 'Weekly'
+      : payFrequency === 'monthly'
+        ? 'Monthly'
+        : 'Every 2 weeks'
+  const payDateCount = payFrequency === 'biweekly' ? 2 : 1
+  const nextPayDateLabel =
+    payDates.find((date) => date && date.trim()) ?? ''
+  const nextPayDateDisplay = nextPayDateLabel
+    ? formatShortDate(nextPayDateLabel)
+    : '—'
+  const aiGuidance = useMemo(
+    () =>
+      buildPaycheckGuidance({
+        bankBalance,
+        bankBalanceAfterBills,
+        billsPerPaycheck,
+        nextPaycheckAfterBills,
+        nextPaycheckTotal,
+        payFrequencyLabel,
+        leftToBudget,
+        dailyFlexTarget,
+        weeklyFlexTarget,
+      }),
+    [
+      bankBalance,
+      bankBalanceAfterBills,
+      billsPerPaycheck,
+      nextPaycheckAfterBills,
+      nextPaycheckTotal,
+      payFrequencyLabel,
+      leftToBudget,
+      dailyFlexTarget,
+      weeklyFlexTarget,
+    ]
+  )
   const weeklyBaseWeights = [0.3, 0.25, 0.28, 0.17]
   const weeklyWeights = weeklyBaseWeights.map(
     (_, index) =>
@@ -3483,12 +3710,31 @@ function App() {
     trendSource.reduce((sum, amount) => sum + amount, 0) / trendSource.length
   const trendMinAmount = Math.min(...trendSource)
   const trendMaxAmount = Math.max(...trendSource)
-  const payFrequencyLabel =
-    payFrequency === 'weekly'
-      ? 'Weekly'
-      : payFrequency === 'monthly'
-        ? 'Monthly'
-        : 'Every 2 weeks'
+  const bankGuidance = useMemo(
+    () =>
+      buildPaycheckGuidance({
+        bankBalance,
+        bankBalanceAfterBills,
+        billsPerPaycheck,
+        nextPaycheckAfterBills,
+        nextPaycheckTotal,
+        payFrequencyLabel,
+        leftToBudget,
+        dailyFlexTarget,
+        weeklyFlexTarget,
+      }),
+    [
+      bankBalance,
+      bankBalanceAfterBills,
+      billsPerPaycheck,
+      nextPaycheckAfterBills,
+      nextPaycheckTotal,
+      payFrequencyLabel,
+      leftToBudget,
+      dailyFlexTarget,
+      weeklyFlexTarget,
+    ]
+  )
   const cashflowTrendBox = (
     <div className="cashflow-trend">
       <div>
@@ -4159,7 +4405,7 @@ function App() {
                 Log out
               </button>
             ) : (
-              <button className="ghost" onClick={() => setShowLogin(true)}>
+              <button className="ghost small" onClick={() => setShowLogin(true)}>
                 Log in
               </button>
             )}
@@ -4336,17 +4582,43 @@ function App() {
                   <h2>Budget builder</h2>
                   <p>Log in to keep your numbers private.</p>
                 </div>
-                <div className="panel-footer">
+                <div className="panel-footer builder-footer">
                   <button
-                    className="solid"
+                    className="solid builder-login"
                     onClick={() => setShowLogin(true)}
                     type="button"
                   >
                     Log in to start
                   </button>
                   <p className="panel-note">
-                    Your budget details appear after you sign in.
+                    Sign in to save budgets, sync across devices, and export anytime.
                   </p>
+                  <div className="panel-actions">
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('signup')
+                        setShowLogin(true)
+                      }}
+                    >
+                      Create account
+                    </button>
+                    <button
+                      className="ghost small"
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('login')
+                        setShowLogin(true)
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <div className="panel-footnote">
+                    <span>2 minute setup</span>
+                    <span>Private by default</span>
+                  </div>
                 </div>
               </>
             )}
@@ -4844,6 +5116,12 @@ function App() {
               Planner
             </button>
             <button
+              className={activeView === 'insights' ? 'tab active' : 'tab'}
+              onClick={() => setActiveView('insights')}
+            >
+              AI Insights
+            </button>
+            <button
               className={activeView === 'copilot' ? 'tab active' : 'tab'}
               onClick={() => setActiveView('copilot')}
             >
@@ -4994,6 +5272,48 @@ function App() {
                   ) : null}
                 </div>
               ) : null}
+            </div>
+            <div className="summary-card bank-card">
+              <div className="summary-title">
+                <span>Bank balance</span>
+                <button
+                  className="ghost small"
+                  type="button"
+                  onClick={() => setShowBankBalanceEditor((prev) => !prev)}
+                >
+                  {showBankBalanceEditor ? 'Done' : 'Edit'}
+                </button>
+              </div>
+              <strong>{formatCurrency(bankBalance)}</strong>
+              <small>Cash on hand</small>
+              {showBankBalanceEditor ? (
+                <div className="summary-editor bank-editor">
+                  <label>
+                    Current balance
+                    <input
+                      type="number"
+                      value={bankBalance}
+                      onChange={(event) =>
+                        setBankBalance(Number(event.target.value || 0))
+                      }
+                    />
+                  </label>
+                </div>
+              ) : null}
+              <div className="bank-metrics">
+                <span
+                  className={`bank-metric ${
+                    bankBalanceAfterBills < 0 ? 'negative' : ''
+                  }`}
+                >
+                  <span>After monthly bills</span>
+                  <strong>{formatCurrency(bankBalanceAfterBills)}</strong>
+                </span>
+                <span className="bank-metric">
+                  <span>Bills covered</span>
+                  <strong>{bankCoverageLabel}</strong>
+                </span>
+              </div>
             </div>
             <div className="summary-card">
               <span>Planned monthly bills</span>
@@ -6101,6 +6421,154 @@ function App() {
           </section>
         ) : null}
 
+        {activeView === 'insights' ? (
+          <section className="ai-insights">
+          <div className="section-head">
+            <div>
+              <h2>AI Insights</h2>
+              <p>Bill-by-bill allocations, risk score, and paycheck guidance.</p>
+            </div>
+            <span className="tag">Live</span>
+          </div>
+          <div className="ai-grid">
+            <div className="ai-card">
+              <div className="card-head">
+                <h3>Risk score</h3>
+                <span className={`risk-pill ${riskScore < 60 ? 'high' : ''}`}>
+                  {riskLabel}
+                </span>
+              </div>
+              <div className="risk-score">
+                <strong>{riskScore}</strong>
+                <span>/ 100</span>
+              </div>
+              <p className="risk-explain">
+                Starts at 100, then subtracts for bills above income, over-budget
+                plan, bank balance short of bills, low bill coverage (under 1 month,
+                extra penalty under 0.5), and overspending vs plan.
+              </p>
+              <div className="risk-stats">
+                <span>
+                  <strong>{formatCurrency(bankBalance)}</strong>
+                  <small>Bank balance</small>
+                </span>
+                <span>
+                  <strong>{formatCurrency(plannedBillsDisplayTotal)}</strong>
+                  <small>Monthly bills</small>
+                </span>
+                <span>
+                  <strong>{bankCoverageLabel}</strong>
+                  <small>Bills covered</small>
+                </span>
+                <span>
+                  <strong>{formatCurrency(leftToBudget)}</strong>
+                  <small>Left to budget</small>
+                </span>
+              </div>
+            </div>
+            <div className="ai-card">
+              <div className="card-head">
+                <h3>Paycheck guidance</h3>
+                <span className="tag">Actionable</span>
+              </div>
+              <div className="ai-guidance">
+                {aiGuidance.map((item, index) => (
+                  <p key={`ai-guidance-${index}`}>{item}</p>
+                ))}
+              </div>
+              <div className="ai-metrics">
+                <span>
+                  <strong>{formatCurrency(nextPaycheckTotal)}</strong>
+                  <small>Next paycheck</small>
+                </span>
+                <span>
+                  <strong>{nextPayDateDisplay}</strong>
+                  <small>Next pay date</small>
+                </span>
+                <span>
+                  <strong>{formatCurrency(billsPerPaycheck)}</strong>
+                  <small>Set aside for bills</small>
+                </span>
+                <span>
+                  <strong>{formatCurrency(nextPaycheckAfterBills)}</strong>
+                  <small>After bills</small>
+                </span>
+                <span>
+                  <strong>{formatCurrency(weeklyFlexTarget)}</strong>
+                  <small>Weekly flex</small>
+                </span>
+              </div>
+            </div>
+            <div className="ai-card">
+              <div className="card-head">
+                <h3>Bill-by-bill allocation</h3>
+                <div className="allocation-controls">
+                  <span className="tag">Next paycheck</span>
+                  <div className="allocation-toggle">
+                    <button
+                      className={allocationSortMode === 'due' ? 'solid small' : 'ghost small'}
+                      type="button"
+                      onClick={() => setAllocationSortMode('due')}
+                    >
+                      Due date
+                    </button>
+                    <button
+                      className={allocationSortMode === 'custom' ? 'solid small' : 'ghost small'}
+                      type="button"
+                      onClick={() => setAllocationSortMode('custom')}
+                    >
+                      Custom
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="allocation-table">
+                <div className="allocation-row header">
+                  <span>Bill</span>
+                  <span>Due</span>
+                  <span>Planned</span>
+                  <span>Allocation</span>
+                  <span>Order</span>
+                </div>
+                {orderedAllocations.length ? (
+                  orderedAllocations.map((bill, index) => (
+                    <div className="allocation-row" key={`alloc-${bill.id}`}>
+                      <span>{bill.name || 'Untitled bill'}</span>
+                      <span>{bill.dueLabel || 'Unscheduled'}</span>
+                      <span>{formatCurrency(bill.amount)}</span>
+                      <span>{formatCurrency(bill.allocation)}</span>
+                      <div className="allocation-actions">
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => moveAllocation(bill.id, 'up')}
+                          disabled={allocationSortMode !== 'custom' || index === 0}
+                        >
+                          Up
+                        </button>
+                        <button
+                          className="ghost small"
+                          type="button"
+                          onClick={() => moveAllocation(bill.id, 'down')}
+                          disabled={
+                            allocationSortMode !== 'custom' ||
+                            index === orderedAllocations.length - 1
+                          }
+                        >
+                          Down
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="muted">Add bills to see allocations.</p>
+                )}
+              </div>
+            </div>
+          </div>
+          </section>
+        ) : null}
+
 
         {activeView === 'copilot' ? (
           <section className="copilot">
@@ -6181,6 +6649,49 @@ function App() {
                   Suggestions land here. Click Apply changes to confirm.
                 </p>
               )}
+            </div>
+            <div className="insight-card">
+              <div className="card-head">
+                <h3>Bank + paycheck guidance</h3>
+                <span className="tag">Live stats</span>
+              </div>
+              <div className="insight-list">
+                {bankGuidance.map((item, index) => (
+                  <p key={`bank-guidance-${index}`}>{item}</p>
+                ))}
+              </div>
+              <div className="insight-stats">
+                <div className="insight-stat">
+                  <span>Bank balance</span>
+                  <strong>{formatCurrency(bankBalance)}</strong>
+                  <small>Cash on hand</small>
+                </div>
+                <div className="insight-stat">
+                  <span>Bills this month</span>
+                  <strong>{formatCurrency(plannedBillsDisplayTotal)}</strong>
+                  <small>{plannedBillsDisplayCount} bills</small>
+                </div>
+                <div className="insight-stat">
+                  <span>Bills per paycheck</span>
+                  <strong>{formatCurrency(billsPerPaycheck)}</strong>
+                  <small>{payFrequencyLabel} cadence</small>
+                </div>
+                <div className="insight-stat">
+                  <span>Next paycheck left</span>
+                  <strong>{formatCurrency(nextPaycheckAfterBills)}</strong>
+                  <small>After bills</small>
+                </div>
+                <div className="insight-stat">
+                  <span>Flex per day</span>
+                  <strong>{formatCurrency(dailyFlexTarget)}</strong>
+                  <small>Flex per week {formatCurrency(weeklyFlexTarget)}</small>
+                </div>
+                <div className="insight-stat">
+                  <span>Bills coverage</span>
+                  <strong>{bankCoverageLabel}</strong>
+                  <small>Based on balance</small>
+                </div>
+              </div>
             </div>
           </div>
           </section>
@@ -6490,6 +7001,27 @@ function App() {
                     <option value="monthly">Monthly</option>
                   </select>
                 </label>
+                <div className="input-row">
+                  Pay dates
+                  <div className="paydate-row">
+                    {Array.from({ length: payDateCount }).map((_, index) => (
+                      <label className="paydate-field" key={`paydate-${index}`}>
+                        {payFrequency === 'monthly'
+                          ? 'Payday'
+                          : `Payday ${index + 1}`}
+                        <input
+                          type="date"
+                          value={payDates[index] ?? ''}
+                          onChange={(event) => {
+                            const next = [...payDates]
+                            next[index] = event.target.value
+                            setPayDates(next)
+                          }}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <label className="input-row">
                   Primary goal
                   <select

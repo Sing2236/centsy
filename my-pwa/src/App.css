@@ -224,6 +224,8 @@
   border: 1px solid var(--border-soft);
   display: grid;
   gap: 1.5rem;
+  align-content: start;
+  align-items: start;
 }
 
 .panel-head h2 {
@@ -286,6 +288,12 @@
 .panel-footer {
   display: grid;
   gap: 0.6rem;
+  justify-items: start;
+}
+
+.builder-footer {
+  justify-items: center;
+  text-align: center;
 }
 
 .panel-note {
@@ -297,6 +305,56 @@
 .panel-note.success {
   color: #0f766e;
   font-weight: 600;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.panel-footnote {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 0.78rem;
+  color: var(--ink-500);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.panel-footnote span {
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.builder-login {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1.6rem;
+  font-size: 1rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fb923c, #f97316);
+  color: #1f2937;
+  box-shadow: 0 10px 22px rgba(249, 115, 22, 0.28);
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.builder-login:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(249, 115, 22, 0.35);
+  filter: saturate(1.05);
+}
+
+.builder-login:focus-visible {
+  outline: 3px solid rgba(249, 115, 22, 0.35);
+  outline-offset: 3px;
 }
 
 main {
@@ -544,6 +602,30 @@ main {
 
 .summary-card.highlight.negative {
   background: #7f1d1d;
+}
+
+.bank-metrics {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--ink-600);
+  margin-top: 0.4rem;
+}
+
+.bank-metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.bank-metric strong {
+  font-size: 0.9rem;
+  color: var(--ink-800);
+}
+
+.bank-metric.negative strong {
+  color: #b91c1c;
 }
 
 .budget-grid {
