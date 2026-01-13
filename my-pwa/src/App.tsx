@@ -105,6 +105,11 @@ type BudgetState = {
   spendEntries: SpendEntry[]
 }
 
+type UiAction = {
+  view: AppView
+  panel?: 'cadence' | 'strategy' | 'labels' | 'schedule' | null
+}
+
 type MarketingView =
   | 'home'
   | 'features'
@@ -362,6 +367,70 @@ const extractDayFromLabel = (dateLabel: string) => {
 const formatBillDateLabel = (bill: { date: string; recurringDay?: number | null }) =>
   bill.recurringDay ? `Monthly on ${bill.recurringDay}` : bill.date
 
+const findNameMatch = (names: string[], text: string) => {
+  const normalized = text.toLowerCase()
+  return (
+    [...names]
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length)
+      .find((name) => normalized.includes(name.toLowerCase())) ?? null
+  )
+}
+
+const parseLooseAmount = (text: string) => {
+  const match = text.match(
+    /(\d{1,3}(?:,\d{3})*|\d+)(?:\.\d{1,2})?/
+  )
+  if (!match) return null
+  const normalized = match[0].replace(/,/g, '')
+  const value = Number.parseFloat(normalized)
+  return Number.isNaN(value) ? null : value
+}
+
+const parseMonthFromText = (text: string) => {
+  const normalized = text.toLowerCase()
+  const months = [
+    'january',
+    'february',
+    'march',
+    'april',
+    'may',
+    'june',
+    'july',
+    'august',
+    'september',
+    'october',
+    'november',
+    'december',
+  ]
+  const index = months.findIndex((month) => normalized.includes(month))
+  if (index >= 0) return index + 1
+  const shortMonths = [
+    'jan',
+    'feb',
+    'mar',
+    'apr',
+    'may',
+    'jun',
+    'jul',
+    'aug',
+    'sep',
+    'oct',
+    'nov',
+    'dec',
+  ]
+  const shortIndex = shortMonths.findIndex((month) =>
+    normalized.includes(month)
+  )
+  return shortIndex >= 0 ? shortIndex + 1 : null
+}
+
+const formatIsoDate = (year: number, month: number, day: number) => {
+  const safeMonth = String(month).padStart(2, '0')
+  const safeDay = String(day).padStart(2, '0')
+  return `${year}-${safeMonth}-${safeDay}`
+}
+
 const buildPaycheckGuidance = (options: {
   bankBalance: number
   bankBalanceAfterBills: number
@@ -589,6 +658,10 @@ function App() {
     'due'
   )
   const [allocationOrder, setAllocationOrder] = useState<string[]>([])
+  const [pendingUiAction, setPendingUiAction] = useState<UiAction | null>(null)
+  const [pendingUtilityAction, setPendingUtilityAction] = useState<
+    'exportCsv' | null
+  >(null)
   const [waitlistEmail, setWaitlistEmail] = useState('')
   const [waitlistStatus, setWaitlistStatus] = useState<
     'idle' | 'success' | 'error'
@@ -2092,6 +2165,17 @@ function App() {
       applyLocalAction(pendingLocalAction)
     } else if (pendingUpdates) {
       applyBudgetUpdates(pendingUpdates)
+    } else if (pendingUiAction) {
+      if (marketingView !== 'app') {
+        handleMarketingNav('app', { appView: pendingUiAction.view })
+      } else {
+        setActiveView(pendingUiAction.view)
+      }
+      if (pendingUiAction.panel !== undefined) {
+        setActivePanel(pendingUiAction.panel ?? null)
+      }
+    } else if (pendingUtilityAction === 'exportCsv') {
+      handleExportCsv()
     } else {
       setChatMessages((prev) => [
         ...prev,
@@ -2103,6 +2187,8 @@ function App() {
     setPendingLocalAction(null)
     setPendingSummary('')
     setPendingSpendDraft(null)
+    setPendingUiAction(null)
+    setPendingUtilityAction(null)
     showToast('Changes applied.')
     setChatMessages((prev) => [
       ...prev,
@@ -2774,7 +2860,33 @@ function App() {
       setPendingLocalAction(null)
       setPendingSummary('')
       setPendingSpendDraft(null)
+      setPendingUiAction(null)
+      setPendingUtilityAction(null)
       setChatMessages((prev) => [...prev, { role: 'assistant', content: 'Canceled.' }])
+      return
+    }
+
+    if (
+      /\b(what can you do|help|capabilities|commands|how can you help|what do you do)\b/.test(
+        normalizedMessage
+      )
+    ) {
+      const helpMessage = [
+        'Here is what I can do in Budget Space:',
+        '- Navigate: Budget, Cash flow, Spending, Planner, AI Insights, Preferences, Copilot, and open Bill Schedule.',
+        '- Money inputs: bank balance, income + pay cadence, partner income, pay dates, cash buffer.',
+        '- Bills: add/update/remove bills, bulk add, set due dates or monthly recurring days, shift schedule bias.',
+        '- Categories + goals: add/update planned amounts, add/update goals and targets.',
+        '- Labels + spend log: add labels, log or remove spend entries.',
+        '- Preferences: debt strategy, autosuggest, autosave, notifications + reminder lead days.',
+        '- Investments: add stocks, monthly investment, expected return.',
+        '- Utilities: export CSV, reset/clear actions (with confirmation).',
+        'Summary: I can update any Budget Space data and move you to any view. I always stage changes and ask you to Apply.',
+      ].join('\n')
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: helpMessage },
+      ])
       return
     }
     setChatLoading(true)
@@ -2782,6 +2894,8 @@ function App() {
     setPendingUpdates(null)
     setPendingLocalAction(null)
     setPendingSummary('')
+    setPendingUiAction(null)
+    setPendingUtilityAction(null)
 
     if (pendingSpendDraft) {
       const hasSpendFollowup =
@@ -3078,6 +3192,453 @@ function App() {
           role: 'assistant',
           content: 'Ready. Click Apply changes to confirm.',
         },
+      ])
+      setChatLoading(false)
+      return
+    }
+
+    const uiIntent = (() => {
+      const wantsOpen = /\b(open|show|go to|switch to|take me to|navigate)\b/.test(
+        normalizedMessage
+      )
+      if (!wantsOpen) return null
+      if (/\b(ai insights|insights)\b/.test(normalizedMessage)) {
+        return { view: 'insights' as AppView }
+      }
+      if (/\b(budget space|budget view|budget tab)\b/.test(normalizedMessage)) {
+        return { view: 'workspace' as AppView }
+      }
+      if (/\b(cash flow|cashflow)\b/.test(normalizedMessage)) {
+        return { view: 'cashflow' as AppView }
+      }
+      if (/\b(spending|spend log|spend)\b/.test(normalizedMessage)) {
+        return { view: 'spend' as AppView }
+      }
+      if (/\b(planner|plan)\b/.test(normalizedMessage)) {
+        return { view: 'planner' as AppView }
+      }
+      if (/\b(copilot)\b/.test(normalizedMessage)) {
+        return { view: 'copilot' as AppView }
+      }
+      if (/\b(preferences|settings)\b/.test(normalizedMessage)) {
+        return { view: 'personalize' as AppView }
+      }
+      if (/\b(bill schedule|schedule editor)\b/.test(normalizedMessage)) {
+        return { view: 'planner' as AppView, panel: 'schedule' as const }
+      }
+      return null
+    })()
+
+    if (uiIntent) {
+      setPendingSpendDraft(null)
+      setPendingUiAction(uiIntent)
+      setPendingSummary(
+        `Switch to ${uiIntent.view}${uiIntent.panel ? ' schedule editor' : ''}?`
+      )
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Ready. Click Apply changes to confirm.' },
+      ])
+      setChatLoading(false)
+      return
+    }
+
+    if (/\b(export|download)\b/.test(normalizedMessage)) {
+      setPendingSpendDraft(null)
+      setPendingUtilityAction('exportCsv')
+      setPendingSummary('Export your budget CSV?')
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Ready. Click Apply changes to confirm.' },
+      ])
+      setChatLoading(false)
+      return
+    }
+
+    const preferenceUpdates: Partial<BudgetState> = {}
+    const preferenceNotes: string[] = []
+    const needsFollowup: string[] = []
+
+    if (/\b(bank balance|balance|checking|savings balance)\b/.test(normalizedMessage)) {
+      const amount = parseLooseAmount(userMessage)
+      if (amount === null) {
+        needsFollowup.push('What is your current bank balance?')
+      } else {
+        preferenceUpdates.bankBalance = amount
+        preferenceNotes.push(`Bank balance → ${formatCurrency(amount)}`)
+      }
+    }
+
+    if (/\b(pay(ed|check)?|income)\b/.test(normalizedMessage)) {
+      const amount = parseLooseAmount(userMessage)
+      const freq =
+        /\bbiweekly|every 2 weeks|every two weeks|twice a month\b/.test(
+          normalizedMessage
+        )
+          ? 'biweekly'
+          : /\bweekly\b/.test(normalizedMessage)
+          ? 'weekly'
+          : /\bmonthly\b/.test(normalizedMessage)
+          ? 'monthly'
+          : null
+      if (amount !== null) {
+        preferenceUpdates.incomePerPaycheck = amount
+        preferenceNotes.push(`Income → ${formatCurrency(amount)}`)
+      }
+      if (freq) {
+        preferenceUpdates.payFrequency = freq
+        preferenceNotes.push(`Cadence → ${freq}`)
+      }
+    }
+
+    if (/\bpay frequency\b/.test(normalizedMessage)) {
+      if (/\bbiweekly|every 2 weeks|every two weeks|twice a month\b/.test(normalizedMessage)) {
+        preferenceUpdates.payFrequency = 'biweekly'
+        preferenceNotes.push('Cadence → biweekly')
+      } else if (/\bweekly\b/.test(normalizedMessage)) {
+        preferenceUpdates.payFrequency = 'weekly'
+        preferenceNotes.push('Cadence → weekly')
+      } else if (/\bmonthly\b/.test(normalizedMessage)) {
+        preferenceUpdates.payFrequency = 'monthly'
+        preferenceNotes.push('Cadence → monthly')
+      }
+    }
+
+    if (/\bpartner income|spouse income|partner pay\b/.test(normalizedMessage)) {
+      const amount = parseLooseAmount(userMessage)
+      if (amount === null) {
+        needsFollowup.push('What is your partner income per paycheck?')
+      } else {
+        preferenceUpdates.partnerIncome = amount
+        preferenceUpdates.includePartner = true
+        preferenceNotes.push(
+          `Partner income → ${formatCurrency(amount)} (included)`
+        )
+      }
+    }
+
+    if (/\b(buffer|cash buffer|safety buffer)\b/.test(normalizedMessage)) {
+      const amount = parseLooseAmount(userMessage)
+      if (amount === null) {
+        needsFollowup.push('What monthly buffer should I set?')
+      } else {
+        preferenceUpdates.monthlyBuffer = amount
+        preferenceNotes.push(`Monthly buffer → ${formatCurrency(amount)}`)
+      }
+    }
+
+    if (/\b(snowball|avalanche)\b/.test(normalizedMessage)) {
+      preferenceUpdates.debtStrategy = /\bsnowball\b/.test(normalizedMessage)
+        ? 'snowball'
+        : 'avalanche'
+      preferenceNotes.push(`Debt strategy → ${preferenceUpdates.debtStrategy}`)
+    }
+
+    if (/\bautosuggest\b/.test(normalizedMessage)) {
+      if (/\b(turn off|disable|stop)\b/.test(normalizedMessage)) {
+        preferenceUpdates.autoSuggest = false
+        preferenceNotes.push('Auto-suggest → off')
+      } else if (/\b(turn on|enable)\b/.test(normalizedMessage)) {
+        preferenceUpdates.autoSuggest = true
+        preferenceNotes.push('Auto-suggest → on')
+      }
+    }
+
+    if (/\bautosave\b/.test(normalizedMessage)) {
+      if (/\b(turn off|disable|stop)\b/.test(normalizedMessage)) {
+        preferenceUpdates.autoSaveEnabled = false
+        preferenceNotes.push('Auto-save → off')
+      } else if (/\b(turn on|enable)\b/.test(normalizedMessage)) {
+        preferenceUpdates.autoSaveEnabled = true
+        preferenceNotes.push('Auto-save → on')
+      }
+    }
+
+    if (/\bweekly summary|weekly summaries\b/.test(normalizedMessage)) {
+      if (/\b(turn off|disable|stop)\b/.test(normalizedMessage)) {
+        preferenceUpdates.notificationWeeklySummary = false
+        preferenceNotes.push('Weekly summary → off')
+      } else if (/\b(turn on|enable)\b/.test(normalizedMessage)) {
+        preferenceUpdates.notificationWeeklySummary = true
+        preferenceNotes.push('Weekly summary → on')
+      }
+    }
+
+    if (/\bover budget alert|overbudget alert|over budget alerts\b/.test(normalizedMessage)) {
+      if (/\b(turn off|disable|stop)\b/.test(normalizedMessage)) {
+        preferenceUpdates.notificationOverBudget = false
+        preferenceNotes.push('Over-budget alerts → off')
+      } else if (/\b(turn on|enable)\b/.test(normalizedMessage)) {
+        preferenceUpdates.notificationOverBudget = true
+        preferenceNotes.push('Over-budget alerts → on')
+      }
+    }
+
+    if (/\bbill reminders?\b/.test(normalizedMessage)) {
+      if (/\b(turn off|disable|stop)\b/.test(normalizedMessage)) {
+        preferenceUpdates.notificationBillReminders = false
+        preferenceNotes.push('Bill reminders → off')
+      } else {
+        preferenceUpdates.notificationBillReminders = true
+        preferenceNotes.push('Bill reminders → on')
+      }
+      const leadMatch = normalizedMessage.match(/(\d{1,2})\s*day/)
+      if (leadMatch) {
+        const lead = Number(leadMatch[1])
+        if (!Number.isNaN(lead)) {
+          preferenceUpdates.notificationReminderDays = lead
+          preferenceNotes.push(`Reminder lead days → ${lead}`)
+        }
+      }
+    }
+
+    if (/\bpay dates?|paydays?\b/.test(normalizedMessage)) {
+      const isoMatches =
+        userMessage.match(/\b\d{4}-\d{2}-\d{2}\b/g) ?? []
+      let parsedDates: string[] = []
+      if (isoMatches.length) {
+        parsedDates = isoMatches
+      } else {
+        const dayMatches = [
+          ...userMessage.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\b/g),
+        ]
+        const days = dayMatches
+          .map((match) => Number(match[1]))
+          .filter((day) => day >= 1 && day <= 31)
+        if (days.length) {
+          const now = new Date()
+          const year = now.getFullYear()
+          const month =
+            parseMonthFromText(userMessage) ?? now.getMonth() + 1
+          parsedDates = days.slice(0, 2).map((day) =>
+            formatIsoDate(year, month, day)
+          )
+        }
+      }
+      if (!parsedDates.length) {
+        needsFollowup.push('What pay dates should I use?')
+      } else {
+        preferenceUpdates.payDates = parsedDates
+        if (parsedDates.length === 2) {
+          preferenceUpdates.payFrequency = 'biweekly'
+        }
+        preferenceNotes.push(`Pay dates → ${parsedDates.join(', ')}`)
+      }
+    }
+
+    if (/\bshift bill schedule|shift bills\b/.test(normalizedMessage)) {
+      if (/\bearlier|forward|front\b/.test(normalizedMessage)) {
+        preferenceUpdates.scheduleBias = -1
+        preferenceNotes.push('Schedule bias → -1')
+      } else if (/\blater|end|back\b/.test(normalizedMessage)) {
+        preferenceUpdates.scheduleBias = 1
+        preferenceNotes.push('Schedule bias → 1')
+      } else if (/\beven\b/.test(normalizedMessage)) {
+        preferenceUpdates.scheduleBias = 0
+        preferenceNotes.push('Schedule bias → 0')
+      }
+    }
+
+    const stockMatch = normalizedMessage.match(
+      /\b(\d+(?:\.\d+)?)\s*shares?\s+of\s+([A-Za-z]{1,5})\b/
+    )
+    if (stockMatch) {
+      const shares = Number(stockMatch[1])
+      const symbol = stockMatch[2].toUpperCase()
+      const priceMatch = userMessage.match(/\bat\s*\$?(\d{1,3}(?:,\d{3})*|\d+)(?:\.\d{1,2})?/i)
+      const price = priceMatch ? Number(priceMatch[1].replace(/,/g, '')) : 0
+      if (!Number.isNaN(shares)) {
+        const nextStocks = [
+          ...stocks,
+          { symbol, shares, price, monthly: 0 },
+        ]
+        preferenceUpdates.stocks = nextStocks
+        preferenceNotes.push(`Add stock → ${symbol} (${shares} @ ${price})`)
+      }
+    }
+
+    if (/\bmonthly investment|invest\b/.test(normalizedMessage)) {
+      const amount = parseLooseAmount(userMessage)
+      if (amount !== null) {
+        preferenceUpdates.monthlyInvestment = amount
+        preferenceNotes.push(`Monthly investment → ${formatCurrency(amount)}`)
+      }
+    }
+
+    if (/\bexpected return|return rate|roi\b/.test(normalizedMessage)) {
+      const percentMatch = normalizedMessage.match(/(\d{1,2})\s*%/)
+      if (percentMatch) {
+        const nextReturn = Number(percentMatch[1])
+        if (!Number.isNaN(nextReturn)) {
+          preferenceUpdates.expectedReturn = nextReturn
+          preferenceNotes.push(`Expected return → ${nextReturn}%`)
+        }
+      }
+    }
+
+    const billNameMatch = findNameMatch(
+      budgetBills.map((bill) => bill.name.trim()),
+      userMessage
+    )
+    if (billNameMatch && /\b(set|lower|raise|update)\b/.test(normalizedMessage)) {
+      const amount = parseLooseAmount(userMessage)
+      if (amount !== null) {
+        const nextBills = budgetBills.map((bill) =>
+          bill.name.toLowerCase() === billNameMatch.toLowerCase()
+            ? { ...bill, amount }
+            : bill
+        )
+        const nextCategories = budgetCategories.map((category) =>
+          category.name.toLowerCase() === billNameMatch.toLowerCase()
+            ? { ...category, planned: amount }
+            : category
+        )
+        preferenceUpdates.budgetBills = nextBills
+        preferenceUpdates.budgetCategories = nextCategories
+        preferenceNotes.push(`${billNameMatch} → ${formatCurrency(amount)}`)
+      }
+    }
+
+    if (billNameMatch && /\b(move|schedule)\b/.test(normalizedMessage)) {
+      const dayMatch = normalizedMessage.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/)
+      if (dayMatch) {
+        const day = Number(dayMatch[1])
+        const monthly = /\bmonthly|every month|each month\b/.test(normalizedMessage)
+        const nextBills = budgetBills.map((bill) => {
+          if (bill.name.toLowerCase() !== billNameMatch.toLowerCase()) return bill
+          if (monthly) {
+            return { ...bill, recurringDay: day, date: 'Unscheduled' }
+          }
+          const now = new Date()
+          const year = now.getFullYear()
+          const month = parseMonthFromText(userMessage) ?? now.getMonth() + 1
+          const dateLabel = formatIsoDate(year, month, day)
+          return { ...bill, date: dateLabel, recurringDay: null }
+        })
+        preferenceUpdates.budgetBills = nextBills
+        preferenceNotes.push(`${billNameMatch} scheduled`)
+      }
+    }
+
+    if (!billNameMatch) {
+      const categoryMatch = findNameMatch(
+        budgetCategories.map((category) => category.name.trim()),
+        userMessage
+      )
+      if (categoryMatch && /\b(set|update)\b/.test(normalizedMessage)) {
+        const amount = parseLooseAmount(userMessage)
+        if (amount !== null) {
+          const nextCategories = budgetCategories.map((category) =>
+            category.name.toLowerCase() === categoryMatch.toLowerCase()
+              ? { ...category, planned: amount }
+              : category
+          )
+          preferenceUpdates.budgetCategories = nextCategories
+          preferenceNotes.push(`${categoryMatch} → ${formatCurrency(amount)}`)
+        }
+      }
+    }
+
+    if (
+      /\badd (a )?bill\b/.test(normalizedMessage) ||
+      (/\badd\b/.test(normalizedMessage) &&
+        !/\b(label|goal|stock|shares?|spend|transaction)\b/.test(normalizedMessage))
+    ) {
+      const amount = parseLooseAmount(userMessage)
+      const nameMatch = userMessage.match(
+        /add (?:a )?bill[:\s]+([^,]+?)(?:\s+\$|\s+for|\s+at|$)/i
+      ) || userMessage.match(/add\s+(.+?)\s+\$?\d/i)
+      const name = nameMatch ? nameMatch[1].trim() : null
+      if (!name || amount === null) {
+        needsFollowup.push('What bill name and amount should I add?')
+      } else {
+        const nextBills = mergeBills(budgetBills, [{ name, amount }])
+        const nextCategories = mergeCategoriesFromBills(
+          budgetCategories,
+          [{ name, amount }]
+        )
+        preferenceUpdates.budgetBills = nextBills
+        preferenceUpdates.budgetCategories = nextCategories
+        preferenceNotes.push(`Add bill ${name} → ${formatCurrency(amount)}`)
+      }
+    }
+
+    if (/\badd label\b/.test(normalizedMessage)) {
+      const labelMatch = userMessage.match(/label(?: called| named)?\s+([^,]+)$/i)
+      const labelName = labelMatch ? labelMatch[1].trim() : null
+      if (!labelName) {
+        needsFollowup.push('Which label should I add?')
+      } else if (!labels.map((label) => label.toLowerCase()).includes(labelName.toLowerCase())) {
+        preferenceUpdates.labels = [...labels, labelName]
+        preferenceNotes.push(`Add label → ${labelName}`)
+      }
+    }
+
+    const goalNameMatch = findNameMatch(
+      budgetGoals.map((goal) => goal.name.trim()),
+      userMessage
+    )
+    if (/\badd goal\b/.test(normalizedMessage) || /\bgoal:\b/i.test(userMessage)) {
+      const nameMatch = userMessage.match(/goal[:\s]+([^,]+?)(?:,|$)/i)
+      const name = nameMatch ? nameMatch[1].trim() : null
+      const amounts = [...userMessage.matchAll(/(\d{1,3}(?:,\d{3})*|\d+)(?:\.\d{1,2})?/g)]
+        .map((match) => Number(match[1].replace(/,/g, '')))
+        .filter((value) => !Number.isNaN(value))
+      const target = amounts[0]
+      if (!name || target === undefined) {
+        needsFollowup.push('What goal name and target should I add?')
+      } else {
+        preferenceUpdates.budgetGoals = [
+          ...budgetGoals,
+          { name, amount: 0, target },
+        ]
+        preferenceNotes.push(`Add goal ${name} → ${formatCurrency(target)}`)
+      }
+    } else if (goalNameMatch && /\b(update|set)\b/.test(normalizedMessage)) {
+      const amounts = [...userMessage.matchAll(/(\d{1,3}(?:,\d{3})*|\d+)(?:\.\d{1,2})?/g)]
+        .map((match) => Number(match[1].replace(/,/g, '')))
+        .filter((value) => !Number.isNaN(value))
+      if (amounts.length) {
+        const mentionsTarget = /\btarget\b/.test(normalizedMessage)
+        const mentionsCurrent = /\b(current|amount|saved)\b/.test(normalizedMessage)
+        const nextGoals = budgetGoals.map((goal) => {
+          if (goal.name.toLowerCase() !== goalNameMatch.toLowerCase()) return goal
+          let nextAmount = goal.amount
+          let nextTarget = goal.target
+          if (amounts.length >= 2) {
+            nextAmount = amounts[0]
+            nextTarget = amounts[1]
+          } else if (mentionsTarget && amounts.length === 1) {
+            nextTarget = amounts[0]
+          } else if (mentionsCurrent || amounts.length === 1) {
+            nextAmount = amounts[0]
+          }
+          return { ...goal, amount: nextAmount, target: nextTarget }
+        })
+        preferenceUpdates.budgetGoals = nextGoals
+        preferenceNotes.push(`Update goal ${goalNameMatch}`)
+      }
+    }
+
+    if (Object.keys(preferenceUpdates).length || needsFollowup.length) {
+      setPendingSpendDraft(null)
+      if (needsFollowup.length) {
+        setChatMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: needsFollowup[0] },
+        ])
+        setChatLoading(false)
+        return
+      }
+      setPendingUpdates(preferenceUpdates)
+      setPendingSummary(
+        preferenceNotes.length
+          ? `Apply updates: ${preferenceNotes.join(', ')}?`
+          : 'Apply updates?'
+      )
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Ready. Click Apply changes to confirm.' },
       ])
       setChatLoading(false)
       return
@@ -6742,7 +7303,10 @@ function App() {
             </div>
             <div className="suggestion-card">
               <h3>Suggestions</h3>
-              {pendingUpdates || pendingLocalAction ? (
+              {pendingUpdates ||
+              pendingLocalAction ||
+              pendingUiAction ||
+              pendingUtilityAction ? (
                 <>
                   <p>{pendingSummary}</p>
                   <div className="inline-actions">

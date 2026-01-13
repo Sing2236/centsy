@@ -1066,6 +1066,14 @@
   gap: 1rem;
 }
 
+.chat-card {
+  padding: 0.9rem;
+  max-width: 420px;
+  gap: 0.6rem;
+  align-content: start;
+  grid-template-rows: 1fr auto;
+}
+
 .insight-list {
   display: grid;
   gap: 0.6rem;
@@ -1109,17 +1117,19 @@
 }
 
 .chat-window {
-  min-height: 220px;
-  max-height: 320px;
+  min-height: 240px;
+  max-height: none;
   overflow: auto;
   display: grid;
   gap: 0.8rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .chat-bubble {
   padding: 0.7rem 0.9rem;
   border-radius: 16px;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   line-height: 1.4;
   max-width: 90%;
 }
@@ -1140,13 +1150,34 @@
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.2rem;
 }
 
 .chat-input input {
-  padding: 0.6rem 0.7rem;
+  padding: 0.5rem 0.65rem;
   border-radius: 12px;
   border: 1px solid rgba(15, 23, 42, 0.15);
   font-family: inherit;
+  font-size: 0.9rem;
+  height: 44px;
+}
+
+.chat-input button {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+  height: 44px;
+  align-self: center;
+}
+
+@media (max-width: 600px) {
+  .chat-input {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-input button {
+    width: 100%;
+  }
 }
 
 .invest-grid {
