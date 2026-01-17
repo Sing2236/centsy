@@ -84,6 +84,7 @@ type BudgetState = {
   autoSuggest: boolean
   includePartner: boolean
   bankBalance: number
+  creditCardBalance: number
   payDates: string[]
   monthlyBuffer: number
   notificationWeeklySummary: boolean
@@ -119,6 +120,9 @@ type MarketingView =
   | 'terms'
   | 'privacy'
   | 'app'
+  | 'budgeting-app'
+  | 'cash-flow-budgeting'
+  | 'paycheck-planning'
 
 type AppView =
   | 'workspace'
@@ -160,6 +164,13 @@ const spendEntriesSeed: SpendEntry[] = []
 const usernamePattern = /^[A-Za-z0-9_]{3,20}$/
 
 const devNotesSeed = [
+  {
+    title: 'AI Insights credit card payoff guidance',
+    date: 'Jan 16, 2026',
+    summary:
+      'Added a credit card balance input in AI Insights with personalized payoff guidance, targets, and timelines. Expanded AI Insights logic to adapt advice dynamically based on cash flow, coverage, and spending variance.',
+    tag: 'Insights',
+  },
   {
     title: 'Community usernames + Savings Concierge fixes',
     date: 'Jan 02, 2026',
@@ -238,6 +249,12 @@ const marketingViewFromParam = (value: string | null): MarketingView => {
       return 'about'
     case 'dev-notes':
       return 'dev-notes'
+    case 'budgeting-app':
+      return 'budgeting-app'
+    case 'cash-flow-budgeting':
+      return 'cash-flow-budgeting'
+    case 'paycheck-planning':
+      return 'paycheck-planning'
     case 'investors':
       return 'investors'
     case 'updates':
@@ -261,6 +278,12 @@ const marketingViewToParam = (view: MarketingView) => {
       return 'about'
     case 'dev-notes':
       return 'updates'
+    case 'budgeting-app':
+      return 'budgeting-app'
+    case 'cash-flow-budgeting':
+      return 'cash-flow-budgeting'
+    case 'paycheck-planning':
+      return 'paycheck-planning'
     case 'investors':
       return 'investors'
     case 'terms':
@@ -271,6 +294,60 @@ const marketingViewToParam = (view: MarketingView) => {
       return 'app'
     default:
       return ''
+  }
+}
+
+const marketingViewFromPath = (value: string | null): MarketingView => {
+  switch (value) {
+    case '/features':
+      return 'features'
+    case '/about':
+      return 'about'
+    case '/dev-notes':
+      return 'dev-notes'
+    case '/budgeting-app':
+      return 'budgeting-app'
+    case '/cash-flow-budgeting':
+      return 'cash-flow-budgeting'
+    case '/paycheck-planning':
+      return 'paycheck-planning'
+    case '/investors':
+      return 'investors'
+    case '/terms':
+      return 'terms'
+    case '/privacy':
+      return 'privacy'
+    case '/app':
+      return 'app'
+    default:
+      return 'home'
+  }
+}
+
+const marketingPathFor = (view: MarketingView) => {
+  switch (view) {
+    case 'features':
+      return '/features'
+    case 'about':
+      return '/about'
+    case 'dev-notes':
+      return '/dev-notes'
+    case 'budgeting-app':
+      return '/budgeting-app'
+    case 'cash-flow-budgeting':
+      return '/cash-flow-budgeting'
+    case 'paycheck-planning':
+      return '/paycheck-planning'
+    case 'investors':
+      return '/investors'
+    case 'terms':
+      return '/terms'
+    case 'privacy':
+      return '/privacy'
+    case 'app':
+      return '/app'
+    default:
+      return '/'
   }
 }
 
@@ -441,6 +518,10 @@ const buildPaycheckGuidance = (options: {
   leftToBudget: number
   dailyFlexTarget: number
   weeklyFlexTarget: number
+  plannedBillsDisplayTotal: number
+  monthlyIncome: number
+  bankCoverageMonths: number
+  spendVariance: number
 }) => {
   const items: string[] = []
   if (!options.bankBalance) {
@@ -449,9 +530,22 @@ const buildPaycheckGuidance = (options: {
     items.push(
       `You are short ${formatCurrency(Math.abs(options.bankBalanceAfterBills))} for monthly bills.`
     )
+  } else if (options.bankCoverageMonths >= 2) {
+    items.push(
+      `You have about ${options.bankCoverageMonths.toFixed(1)} months of bill coverage. Consider shifting extra cash to buffer or debt.`
+    )
+  } else if (options.bankCoverageMonths < 1) {
+    items.push(
+      `Your balance covers about ${options.bankCoverageMonths.toFixed(1)} months of bills. Protect cash flow until you reach 1 month.`
+    )
   } else {
     items.push(
       `You can cover monthly bills with ${formatCurrency(options.bankBalanceAfterBills)} left.`
+    )
+  }
+  if (options.plannedBillsDisplayTotal > options.monthlyIncome) {
+    items.push(
+      `Bills exceed income by ${formatCurrency(options.plannedBillsDisplayTotal - options.monthlyIncome)}. Trim bills or add income to close the gap.`
     )
   }
   if (options.nextPaycheckTotal > 0) {
@@ -460,16 +554,107 @@ const buildPaycheckGuidance = (options: {
     )
     items.push(
       options.nextPaycheckAfterBills < 0
-        ? `Your next paycheck is short ${formatCurrency(Math.abs(options.nextPaycheckAfterBills))} after bills.`
+        ? `Your next paycheck is short ${formatCurrency(Math.abs(options.nextPaycheckAfterBills))} after bills. Split upcoming bills or pause extras.`
         : `You will have about ${formatCurrency(options.nextPaycheckAfterBills)} from your next paycheck for goals and spending.`
     )
   }
+  if (options.leftToBudget < 0) {
+    items.push(
+      `Your plan is over budget by ${formatCurrency(Math.abs(options.leftToBudget))}. Reduce bills or boost income.`
+    )
+  } else if (options.leftToBudget < 150) {
+    items.push(
+      `Flex is tight. Cap spending at ${formatCurrency(options.dailyFlexTarget)} per day to stay on track.`
+    )
+  } else {
+    items.push(
+      `Aim for ${formatCurrency(options.dailyFlexTarget)} per day or ${formatCurrency(options.weeklyFlexTarget)} per week of flexible spend.`
+    )
+  }
+  if (options.spendVariance > 0) {
+    items.push(
+      `Spending is over plan by ${formatCurrency(options.spendVariance)}. Pause non-essentials until you catch up.`
+    )
+  } else if (options.spendVariance < -50) {
+    items.push(
+      `You are under plan by ${formatCurrency(Math.abs(options.spendVariance))}. Consider sending the surplus to savings or debt.`
+    )
+  }
+  return items.slice(0, 5)
+}
+
+const buildCreditCardGuidance = (options: {
+  balance: number
+  leftToBudget: number
+  bankBalanceAfterBills: number
+  nextPaycheckAfterBills: number
+  payFrequencyLabel: string
+  debtStrategy: string
+  monthlyIncome: number
+  effectiveMultiplier: number
+}) => {
+  const items: string[] = []
+  const paymentCapacity = Math.max(0, options.leftToBudget)
+  const basePayment =
+    paymentCapacity > 0
+      ? Math.min(options.balance, Math.max(25, Math.round(paymentCapacity * 0.6)))
+      : 0
+  const perPaycheck =
+    basePayment > 0 ? basePayment / Math.max(1, options.effectiveMultiplier) : 0
+  const monthsToClear =
+    basePayment > 0 ? Math.ceil(options.balance / basePayment) : 0
+
+  if (options.balance <= 0) {
+    items.push(
+      'No credit card balance logged. Keep utilization under 30% and pay in full each cycle.'
+    )
+    if (options.leftToBudget > 0) {
+      items.push(
+        `You have ${formatCurrency(options.leftToBudget)} left to direct to savings or goals.`
+      )
+    }
+    return { items, basePayment: 0, perPaycheck: 0, monthsToClear: 0 }
+  }
+
+  if (options.bankBalanceAfterBills < 0) {
+    items.push(
+      `Cash is short by ${formatCurrency(Math.abs(options.bankBalanceAfterBills))} after bills. Prioritize essentials and make minimums while you stabilize.`
+    )
+  }
+  if (options.monthlyIncome > 0 && options.balance > options.monthlyIncome) {
+    items.push(
+      `Balance is above one month of income (${formatCurrency(options.monthlyIncome)}). Consider a 0% transfer or consolidation if rates are high.`
+    )
+  }
+  if (paymentCapacity <= 0) {
+    items.push(
+      `You are over budget by ${formatCurrency(Math.abs(options.leftToBudget))}. Create monthly room before accelerating payoff.`
+    )
+  } else if (basePayment >= options.balance) {
+    items.push(
+      `You can clear the balance this month with a ${formatCurrency(basePayment)} payment after bills.`
+    )
+  } else {
+    items.push(
+      `Target ${formatCurrency(basePayment)} per month (${formatCurrency(perPaycheck)} per ${options.payFrequencyLabel.toLowerCase()} paycheck).`
+    )
+    if (monthsToClear > 0) {
+      items.push(`At that pace you clear the balance in about ${monthsToClear} months.`)
+    }
+  }
+
+  if (options.nextPaycheckAfterBills < 0) {
+    items.push(
+      `Next paycheck is tight by ${formatCurrency(Math.abs(options.nextPaycheckAfterBills))}. Split payments across checks to stay current.`
+    )
+  }
+
   items.push(
-    options.leftToBudget < 0
-      ? `Your plan is over budget by ${formatCurrency(Math.abs(options.leftToBudget))}. Reduce bills or boost income.`
-      : `Aim for ${formatCurrency(options.dailyFlexTarget)} per day or ${formatCurrency(options.weeklyFlexTarget)} per week of flexible spend.`
+    options.debtStrategy === 'snowball'
+      ? 'Snowball: pay extra toward the smallest balance while keeping minimums on the rest.'
+      : 'Avalanche: pay extra toward the highest APR while keeping minimums on the rest.'
   )
-  return items
+  return { items, basePayment, perPaycheck, monthsToClear }
 }
 
 const formatShortDate = (value: string) => {
@@ -569,6 +754,7 @@ function App() {
   const [autoSuggest, setAutoSuggest] = useState(true)
   const [includePartner, setIncludePartner] = useState(false)
   const [bankBalance, setBankBalance] = useState(0)
+  const [creditCardBalance, setCreditCardBalance] = useState(0)
   const [showBankBalanceEditor, setShowBankBalanceEditor] = useState(false)
   const [payDates, setPayDates] = useState<string[]>([''])
   const [monthlyBuffer, setMonthlyBuffer] = useState(150)
@@ -625,9 +811,6 @@ function App() {
   )
   const [savingsBill, setSavingsBill] = useState('')
   const [savingsTarget, setSavingsTarget] = useState('')
-  const [savingsMethod, setSavingsMethod] = useState<'phone' | 'chat' | 'email'>(
-    'phone'
-  )
   const [savingsProvider, setSavingsProvider] = useState('')
   const [savingsNotes, setSavingsNotes] = useState('')
   const [savingsPlan, setSavingsPlan] = useState('')
@@ -704,14 +887,22 @@ function App() {
     typeof window !== 'undefined' && window.location.pathname.startsWith('/centsy')
       ? '/centsy'
       : ''
+  const pathName = typeof window !== 'undefined' ? window.location.pathname : '/'
+  const normalizedPath =
+    basePath && pathName.startsWith(basePath)
+      ? pathName.slice(basePath.length) || '/'
+      : pathName
   const viewParam =
     typeof window !== 'undefined'
       ? new URLSearchParams(window.location.search).get('view')
       : null
   const isCommunityPage = viewParam === 'community'
+  const pathView = marketingViewFromPath(normalizedPath)
   const initialMarketingView = isCommunityPage
     ? 'home'
-    : marketingViewFromParam(viewParam)
+    : viewParam
+      ? marketingViewFromParam(viewParam)
+      : pathView
   const [marketingView, setMarketingView] =
     useState<MarketingView>(initialMarketingView)
   const [isNavOpen, setIsNavOpen] = useState(false)
@@ -810,7 +1001,15 @@ function App() {
       if (typeof window === 'undefined') return
       const nextParam = new URLSearchParams(window.location.search).get('view')
       if (nextParam === 'community') return
-      setMarketingView(marketingViewFromParam(nextParam))
+      const nextPath = window.location.pathname
+      const nextNormalized =
+        basePath && nextPath.startsWith(basePath)
+          ? nextPath.slice(basePath.length) || '/'
+          : nextPath
+      const nextView = nextParam
+        ? marketingViewFromParam(nextParam)
+        : marketingViewFromPath(nextNormalized)
+      setMarketingView(nextView)
       setIsNavOpen(false)
     }
     window.addEventListener('popstate', handlePopState)
@@ -839,8 +1038,8 @@ function App() {
   }, [isBudgetTransitioning, marketingView])
 
   const marketingUrlFor = (view: MarketingView) => {
-    const param = marketingViewToParam(view)
-    return param ? `${basePath}/?view=${param}` : `${basePath}/`
+    const path = marketingPathFor(view)
+    return `${basePath}${path === '/' ? '/' : path}`
   }
 
   const getDefaultAppView = () => (budgetGenerated ? 'workspace' : 'personalize')
@@ -882,6 +1081,7 @@ function App() {
       autoSuggest,
       includePartner,
       bankBalance,
+      creditCardBalance,
       payDates,
       monthlyBuffer,
       notificationWeeklySummary,
@@ -910,6 +1110,7 @@ function App() {
       autoSuggest,
       includePartner,
       bankBalance,
+      creditCardBalance,
       payDates,
       monthlyBuffer,
       notificationWeeklySummary,
@@ -3703,7 +3904,6 @@ function App() {
       `Create a savings playbook for ${savingsBill}.`,
       billAmount ? `Current monthly amount: ${formatCurrency(billAmount)}.` : '',
       `Target savings: ${formatCurrency(targetValue)} per month.`,
-      `Preferred contact: ${savingsMethod}.`,
       provider ? `Provider/company: ${provider}.` : '',
       notes ? `Notes: ${notes}.` : '',
       'Include prep checklist, negotiation script, fallback offer, and follow-up note.',
@@ -3788,6 +3988,7 @@ function App() {
     rows.push(['Monthly income', formatCurrency(monthlyIncome)])
     rows.push(['Bank balance', formatCurrency(bankBalance)])
     rows.push(['Bank balance after bills', formatCurrency(bankBalanceAfterBills)])
+    rows.push(['Credit card balance', formatCurrency(creditCardBalance)])
     rows.push([
       'Bills covered (months)',
       plannedBillsDisplayTotal > 0 ? bankCoverageMonths.toFixed(2) : '—',
@@ -3919,6 +4120,7 @@ function App() {
         setAutoSuggest(saved.autoSuggest ?? true)
         setIncludePartner(saved.includePartner ?? false)
         setBankBalance(saved.bankBalance ?? 0)
+        setCreditCardBalance(saved.creditCardBalance ?? 0)
         setPayDates(saved.payDates ?? [''])
         setMonthlyBuffer(saved.monthlyBuffer ?? 150)
         setNotificationWeeklySummary(saved.notificationWeeklySummary ?? true)
@@ -4257,6 +4459,10 @@ function App() {
         leftToBudget,
         dailyFlexTarget,
         weeklyFlexTarget,
+        plannedBillsDisplayTotal,
+        monthlyIncome,
+        bankCoverageMonths,
+        spendVariance,
       }),
     [
       bankBalance,
@@ -4268,6 +4474,10 @@ function App() {
       leftToBudget,
       dailyFlexTarget,
       weeklyFlexTarget,
+      plannedBillsDisplayTotal,
+      monthlyIncome,
+      bankCoverageMonths,
+      spendVariance,
     ]
   )
   const weeklyBaseWeights = [0.3, 0.25, 0.28, 0.17]
@@ -4342,6 +4552,10 @@ function App() {
         leftToBudget,
         dailyFlexTarget,
         weeklyFlexTarget,
+        plannedBillsDisplayTotal,
+        monthlyIncome,
+        bankCoverageMonths,
+        spendVariance,
       }),
     [
       bankBalance,
@@ -4353,6 +4567,33 @@ function App() {
       leftToBudget,
       dailyFlexTarget,
       weeklyFlexTarget,
+      plannedBillsDisplayTotal,
+      monthlyIncome,
+      bankCoverageMonths,
+      spendVariance,
+    ]
+  )
+  const creditCardPlan = useMemo(
+    () =>
+      buildCreditCardGuidance({
+        balance: creditCardBalance,
+        leftToBudget,
+        bankBalanceAfterBills,
+        nextPaycheckAfterBills,
+        payFrequencyLabel,
+        debtStrategy,
+        monthlyIncome,
+        effectiveMultiplier,
+      }),
+    [
+      creditCardBalance,
+      leftToBudget,
+      bankBalanceAfterBills,
+      nextPaycheckAfterBills,
+      payFrequencyLabel,
+      debtStrategy,
+      monthlyIncome,
+      effectiveMultiplier,
     ]
   )
   const cashflowTrendBox = (
@@ -4954,7 +5195,7 @@ function App() {
             </span>
             <div>
               <p className="brand-name">Centsy</p>
-              <p className="brand-tag">Budgeting for real life</p>
+              <p className="brand-tag">Cash-flow budgeting app</p>
             </div>
           </div>
           <button
@@ -5044,10 +5285,10 @@ function App() {
         <div className="hero-grid">
           <div className="hero-copy">
             <p className="eyebrow">Simple. Detailed. Yours.</p>
-            <h1>Finish a full budget in minutes, not hours.</h1>
+            <h1>Centsy is a cash-flow budgeting app.</h1>
             <p className="lead">
-              Answer a few questions, get a complete AI-guided budget, then edit
-              as you go. See how each bill changes your weekly cash.
+              Finish a full budget in minutes, then adjust it as you go. Plan
+              paychecks, bills, and weekly cash with AI-guided clarity.
             </p>
             <form className="hero-waitlist" onSubmit={handleWaitlistSubmit}>
               <div className="waitlist-field">
@@ -5280,12 +5521,12 @@ function App() {
         {marketingView === 'home' ? (
           <section className="seo-hero">
             <div className="seo-hero-copy">
-              <span className="eyebrow">AI finance app</span>
+              <span className="eyebrow">Cash-flow budgeting app</span>
               <h2>Budgeting that actually sticks</h2>
               <p>
-                Centsy is an AI finance app that helps you plan bills, track daily
-                spending, and keep cash flow steady without the guilt. Built for
-                real life, not spreadsheets.
+                Centsy is a cash-flow budgeting app that helps you plan bills, track
+                daily spending, and keep weekly cash steady without the guilt. Built
+                for real life and paycheck planning, not spreadsheets.
               </p>
             </div>
             <div className="seo-hero-highlights">
@@ -5322,6 +5563,153 @@ function App() {
                 }}
               >
                 Read dev notes
+              </a>
+            </div>
+          </section>
+        ) : null}
+        {marketingView === 'budgeting-app' ? (
+          <section className="seo-hero">
+            <div className="seo-hero-copy">
+              <span className="eyebrow">Centsy budgeting app</span>
+              <h2>Plan bills, spending, and goals in one place.</h2>
+              <p>
+                Centsy is a cash-flow budgeting app that turns paychecks and bill
+                timing into a clear weekly plan. Build your budget fast, track
+                daily spending, and adjust with AI-guided help.
+              </p>
+            </div>
+            <div className="seo-hero-highlights">
+              <div>
+                <strong>Budget builder in minutes</strong>
+                <span>Start with smart defaults, then personalize.</span>
+              </div>
+              <div>
+                <strong>Bill timing + reminders</strong>
+                <span>Know what is due and when, every week.</span>
+              </div>
+              <div>
+                <strong>Copilot edits you approve</strong>
+                <span>Stage changes, review, and apply on your terms.</span>
+              </div>
+            </div>
+            <div className="section-actions">
+              <a
+                className="solid"
+                href={marketingUrlFor('features')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('features')
+                }}
+              >
+                See features
+              </a>
+              <a
+                className="ghost"
+                href={marketingUrlFor('home')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('home')
+                }}
+              >
+                Back to home
+              </a>
+            </div>
+          </section>
+        ) : null}
+        {marketingView === 'cash-flow-budgeting' ? (
+          <section className="seo-hero">
+            <div className="seo-hero-copy">
+              <span className="eyebrow">Cash-flow budgeting</span>
+              <h2>See weekly cash before it gets tight.</h2>
+              <p>
+                Centsy focuses on cash flow, not just categories. Track how each
+                bill and paycheck changes your week-by-week balance so the next
+                move is obvious.
+              </p>
+            </div>
+            <div className="seo-hero-highlights">
+              <div>
+                <strong>Weekly cash view</strong>
+                <span>Know what is left after bills land.</span>
+              </div>
+              <div>
+                <strong>Bill-by-bill planning</strong>
+                <span>Allocate each bill across upcoming paychecks.</span>
+              </div>
+              <div>
+                <strong>Risk score + next steps</strong>
+                <span>AI Insights highlights what to fix first.</span>
+              </div>
+            </div>
+            <div className="section-actions">
+              <a
+                className="solid"
+                href={marketingUrlFor('features')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('features')
+                }}
+              >
+                Explore cash-flow tools
+              </a>
+              <a
+                className="ghost"
+                href={marketingUrlFor('home')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('home')
+                }}
+              >
+                Back to home
+              </a>
+            </div>
+          </section>
+        ) : null}
+        {marketingView === 'paycheck-planning' ? (
+          <section className="seo-hero">
+            <div className="seo-hero-copy">
+              <span className="eyebrow">Paycheck planning</span>
+              <h2>Make every paycheck feel accounted for.</h2>
+              <p>
+                Centsy helps you plan each paycheck around bills, goals, and a
+                built-in safety buffer. Set your pay cadence, map upcoming bills,
+                and stay ahead of the month.
+              </p>
+            </div>
+            <div className="seo-hero-highlights">
+              <div>
+                <strong>Payday cadence</strong>
+                <span>Biweekly, monthly, or custom schedules.</span>
+              </div>
+              <div>
+                <strong>Paycheck allocations</strong>
+                <span>See what each paycheck should cover.</span>
+              </div>
+              <div>
+                <strong>Safety buffer + alerts</strong>
+                <span>Stay calm with a cushion and smart reminders.</span>
+              </div>
+            </div>
+            <div className="section-actions">
+              <a
+                className="solid"
+                href={marketingUrlFor('features')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('features')
+                }}
+              >
+                Explore paycheck planning
+              </a>
+              <a
+                className="ghost"
+                href={marketingUrlFor('home')}
+                onClick={(event) => {
+                  event.preventDefault()
+                  handleMarketingNav('home')
+                }}
+              >
+                Back to home
               </a>
             </div>
           </section>
@@ -7184,6 +7572,49 @@ function App() {
             </div>
             <div className="ai-card">
               <div className="card-head">
+                <h3>Credit card payoff</h3>
+                <span className="tag">Personalized</span>
+              </div>
+              <div className="summary-editor">
+                <label>
+                  Current credit card balance
+                  <input
+                    type="number"
+                    value={creditCardBalance}
+                    onChange={(event) =>
+                      setCreditCardBalance(Number(event.target.value || 0))
+                    }
+                  />
+                </label>
+              </div>
+              <div className="ai-guidance">
+                {creditCardPlan.items.map((item, index) => (
+                  <p key={`credit-guidance-${index}`}>{item}</p>
+                ))}
+              </div>
+              <div className="ai-metrics">
+                <span>
+                  <strong>{formatCurrency(creditCardPlan.basePayment)}</strong>
+                  <small>Monthly target</small>
+                </span>
+                <span>
+                  <strong>
+                    {creditCardPlan.monthsToClear
+                      ? `${creditCardPlan.monthsToClear} ${
+                          creditCardPlan.monthsToClear === 1 ? 'month' : 'months'
+                        }`
+                      : '—'}
+                  </strong>
+                  <small>Estimated payoff</small>
+                </span>
+                <span>
+                  <strong>{formatCurrency(creditCardPlan.perPaycheck)}</strong>
+                  <small>Per paycheck</small>
+                </span>
+              </div>
+            </div>
+            <div className="ai-card">
+              <div className="card-head">
                 <h3>Bill-by-bill allocation</h3>
                 <div className="allocation-controls">
                   <span className="tag">Next paycheck</span>
@@ -7413,7 +7844,7 @@ function App() {
                   type="button"
                   onClick={() => setSavingsStep('target')}
                 >
-                  2. Target + method
+                  2. Target + details
                 </button>
                 <button
                   className={`playbook-step ${savingsStep === 'plan' ? 'active' : ''}`}
@@ -7489,21 +7920,6 @@ function App() {
                         value={savingsTarget}
                         onChange={(event) => setSavingsTarget(event.target.value)}
                       />
-                    </label>
-                    <label>
-                      Contact method
-                      <select
-                        value={savingsMethod}
-                        onChange={(event) =>
-                          setSavingsMethod(
-                            event.target.value as 'phone' | 'chat' | 'email'
-                          )
-                        }
-                      >
-                        <option value="phone">Phone call</option>
-                        <option value="chat">Live chat</option>
-                        <option value="email">Email</option>
-                      </select>
                     </label>
                     <label>
                       Provider or company
