@@ -1,5 +1,13 @@
-﻿import { useState } from 'react'
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useState } from 'react'
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { Field } from '../components/Field'
 import { MetricPill } from '../components/MetricPill'
 import { SectionCard } from '../components/SectionCard'
@@ -39,76 +47,86 @@ export const SpendingScreen = ({ entries, plannedSpendTotal, onUpdateEntries }) 
   const variance = spendTotal - plannedSpendTotal
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.pageTitle}>Spending</Text>
-      <SectionCard title="Today" subtitle="Log purchases to keep the plan tight.">
-        <Field
-          label="Merchant"
-          value={draft.merchant}
-          onChangeText={(value) => setDraft((prev) => ({ ...prev, merchant: value }))}
-          placeholder="Trader Joe's"
-        />
-        <Field
-          label="Amount"
-          value={draft.amount}
-          onChangeText={(value) => setDraft((prev) => ({ ...prev, amount: value }))}
-          keyboardType="numeric"
-          placeholder="$"
-        />
-        <Field
-          label="Category"
-          value={draft.category}
-          onChangeText={(value) => setDraft((prev) => ({ ...prev, category: value }))}
-          placeholder="Groceries"
-        />
-        <Field
-          label="Date"
-          value={draft.date}
-          onChangeText={(value) => setDraft((prev) => ({ ...prev, date: value }))}
-          placeholder="2026-01-16"
-        />
-        <Field
-          label="Note"
-          value={draft.note}
-          onChangeText={(value) => setDraft((prev) => ({ ...prev, note: value }))}
-          placeholder="Optional"
-        />
-        <TouchableOpacity style={styles.action} onPress={handleAdd}>
-          <Text style={styles.actionText}>Add spend</Text>
-        </TouchableOpacity>
-      </SectionCard>
-
-      <SectionCard title="Spend health" subtitle="Track progress vs your plan.">
-        <View style={styles.metricGrid}>
-          <MetricPill label="Total spend" value={formatCurrency(spendTotal)} />
-          <MetricPill label="Planned" value={formatCurrency(plannedSpendTotal)} />
-          <MetricPill
-            label={variance > 0 ? 'Over plan' : 'Under plan'}
-            value={formatCurrency(Math.abs(variance))}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 72 : 0}
+    >
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.pageTitle}>Spending</Text>
+        <SectionCard title="Today" subtitle="Log purchases to keep the plan tight.">
+          <Field
+            label="Merchant"
+            value={draft.merchant}
+            onChangeText={(value) => setDraft((prev) => ({ ...prev, merchant: value }))}
+            placeholder="Trader Joe's"
           />
-        </View>
-      </SectionCard>
+          <Field
+            label="Amount"
+            value={draft.amount}
+            onChangeText={(value) => setDraft((prev) => ({ ...prev, amount: value }))}
+            keyboardType="numeric"
+            placeholder="$"
+          />
+          <Field
+            label="Category"
+            value={draft.category}
+            onChangeText={(value) => setDraft((prev) => ({ ...prev, category: value }))}
+            placeholder="Groceries"
+          />
+          <Field
+            label="Date"
+            value={draft.date}
+            onChangeText={(value) => setDraft((prev) => ({ ...prev, date: value }))}
+            placeholder="2026-01-16"
+          />
+          <Field
+            label="Note"
+            value={draft.note}
+            onChangeText={(value) => setDraft((prev) => ({ ...prev, note: value }))}
+            placeholder="Optional"
+          />
+          <TouchableOpacity style={styles.action} onPress={handleAdd}>
+            <Text style={styles.actionText}>Add spend</Text>
+          </TouchableOpacity>
+        </SectionCard>
 
-      <SectionCard title="Recent activity" subtitle="Latest expenses first.">
-        {entries.length === 0 ? (
-          <Text style={styles.muted}>No spend entries yet.</Text>
-        ) : (
-          entries.map((entry) => (
-            <View style={styles.entryRow} key={entry.id}>
-              <View>
-                <Text style={styles.rowTitle}>{entry.merchant}</Text>
-                <Text style={styles.rowMeta}>
-                  Category {entry.category}
-                  {'\n'}
-                  Date {entry.date}
-                </Text>
+        <SectionCard title="Spend health" subtitle="Track progress vs your plan.">
+          <View style={styles.metricGrid}>
+            <MetricPill label="Total spend" value={formatCurrency(spendTotal)} />
+            <MetricPill label="Planned" value={formatCurrency(plannedSpendTotal)} />
+            <MetricPill
+              label={variance > 0 ? 'Over plan' : 'Under plan'}
+              value={formatCurrency(Math.abs(variance))}
+            />
+          </View>
+        </SectionCard>
+
+        <SectionCard title="Recent activity" subtitle="Latest expenses first.">
+          {entries.length === 0 ? (
+            <Text style={styles.muted}>No spend entries yet.</Text>
+          ) : (
+            entries.map((entry) => (
+              <View style={styles.entryRow} key={entry.id}>
+                <View>
+                  <Text style={styles.rowTitle}>{entry.merchant}</Text>
+                  <Text style={styles.rowMeta}>
+                    Category {entry.category}
+                    {'\n'}
+                    Date {entry.date}
+                  </Text>
+                </View>
+                <Text style={styles.amount}>{formatCurrency(entry.amount)}</Text>
               </View>
-              <Text style={styles.amount}>{formatCurrency(entry.amount)}</Text>
-            </View>
-          ))
-        )}
-      </SectionCard>
-    </ScrollView>
+            ))
+          )}
+        </SectionCard>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -116,6 +134,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.surface,
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
     padding: theme.spacing.lg,

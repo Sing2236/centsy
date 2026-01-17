@@ -270,33 +270,6 @@ const marketingViewFromParam = (value: string | null): MarketingView => {
   }
 }
 
-const marketingViewToParam = (view: MarketingView) => {
-  switch (view) {
-    case 'features':
-      return 'features'
-    case 'about':
-      return 'about'
-    case 'dev-notes':
-      return 'updates'
-    case 'budgeting-app':
-      return 'budgeting-app'
-    case 'cash-flow-budgeting':
-      return 'cash-flow-budgeting'
-    case 'paycheck-planning':
-      return 'paycheck-planning'
-    case 'investors':
-      return 'investors'
-    case 'terms':
-      return 'terms'
-    case 'privacy':
-      return 'privacy'
-    case 'app':
-      return 'app'
-    default:
-      return ''
-  }
-}
-
 const marketingViewFromPath = (value: string | null): MarketingView => {
   switch (value) {
     case '/features':

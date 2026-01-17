@@ -1,5 +1,13 @@
 import { useState } from 'react'
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import {
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { theme } from '../theme'
 import { supabase } from '../lib/supabase'
 
@@ -40,7 +48,11 @@ export const AuthScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 72 : 0}
+    >
       <View style={styles.hero}>
         <Text style={styles.title}>Centsy Mobile</Text>
         <Text style={styles.subtitle}>Fresh budgeting momentum on the go.</Text>
@@ -87,7 +99,7 @@ export const AuthScreen = () => {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 

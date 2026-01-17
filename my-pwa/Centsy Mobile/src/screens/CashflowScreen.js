@@ -1,4 +1,12 @@
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { Field } from '../components/Field'
 import { MetricPill } from '../components/MetricPill'
 import { SectionCard } from '../components/SectionCard'
@@ -24,9 +32,18 @@ export const CashflowScreen = ({
   onUpdate,
 }) => {
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.pageTitle}>Cash flow</Text>
-      <SectionCard title="Paycheck setup" subtitle="Keep income and cadence up to date.">
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 72 : 0}
+    >
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.pageTitle}>Cash flow</Text>
+        <SectionCard title="Paycheck setup" subtitle="Keep income and cadence up to date.">
         <Field
           label="Take-home per paycheck"
           value={String(incomePerPaycheck)}
@@ -104,8 +121,9 @@ export const CashflowScreen = ({
           <MetricPill label="Bank after bills" value={formatCurrency(metrics.bankBalanceAfterBills)} />
           <MetricPill label="Left to budget" value={formatCurrency(metrics.leftToBudget)} />
         </View>
-      </SectionCard>
-    </ScrollView>
+        </SectionCard>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -113,6 +131,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.surface,
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
     padding: theme.spacing.lg,

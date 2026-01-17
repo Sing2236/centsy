@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar'
+import { Feather } from '@expo/vector-icons'
 import { NavigationContainer } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
@@ -335,6 +336,102 @@ export default function App() {
     ]
   )
 
+  const applyCopilotUpdates = (updates) => {
+    if (!updates || typeof updates !== 'object') return
+
+    if (updates.incomePerPaycheck !== undefined) {
+      setIncomePerPaycheck(toNumber(updates.incomePerPaycheck, incomePerPaycheck))
+    }
+    if (updates.partnerIncome !== undefined) {
+      setPartnerIncome(toNumber(updates.partnerIncome, partnerIncome))
+    }
+    if (updates.payFrequency !== undefined) {
+      setPayFrequency(toEnum(updates.payFrequency, ['weekly', 'biweekly', 'monthly'], payFrequency))
+    }
+    if (updates.primaryGoal !== undefined) {
+      setPrimaryGoal(
+        toEnum(updates.primaryGoal, ['stability', 'debt', 'savings'], primaryGoal)
+      )
+    }
+    if (updates.autoSuggest !== undefined) {
+      setAutoSuggest(toBoolean(updates.autoSuggest, autoSuggest))
+    }
+    if (updates.includePartner !== undefined) {
+      setIncludePartner(toBoolean(updates.includePartner, includePartner))
+    }
+    if (updates.bankBalance !== undefined) {
+      setBankBalance(toNumber(updates.bankBalance, bankBalance))
+    }
+    if (updates.creditCardBalance !== undefined) {
+      setCreditCardBalance(toNumber(updates.creditCardBalance, creditCardBalance))
+    }
+    if (updates.payDates !== undefined && Array.isArray(updates.payDates)) {
+      setPayDates(updates.payDates)
+    }
+    if (updates.monthlyBuffer !== undefined) {
+      setMonthlyBuffer(toNumber(updates.monthlyBuffer, monthlyBuffer))
+    }
+    if (updates.debtStrategy !== undefined) {
+      setDebtStrategy(
+        toEnum(updates.debtStrategy, ['avalanche', 'snowball'], debtStrategy)
+      )
+    }
+    if (updates.budgetCategories !== undefined && Array.isArray(updates.budgetCategories)) {
+      const nextCategories = updates.budgetCategories.map((category, index) => ({
+        name:
+          typeof category.name === 'string' && category.name.trim()
+            ? category.name.trim()
+            : `Category ${index + 1}`,
+        planned: toNumber(category.planned, 0),
+        actual: toNumber(category.actual, 0),
+      }))
+      setBudgetCategories(nextCategories)
+    }
+    if (updates.budgetGoals !== undefined && Array.isArray(updates.budgetGoals)) {
+      const nextGoals = updates.budgetGoals.map((goal, index) => ({
+        name:
+          typeof goal.name === 'string' && goal.name.trim()
+            ? goal.name.trim()
+            : `Goal ${index + 1}`,
+        amount: toNumber(goal.amount, 0),
+        target: toNumber(goal.target, 0),
+      }))
+      setBudgetGoals(nextGoals)
+    }
+    if (updates.budgetBills !== undefined && Array.isArray(updates.budgetBills)) {
+      const nextBills = updates.budgetBills.map((bill, index) => ({
+        name:
+          typeof bill.name === 'string' && bill.name.trim()
+            ? bill.name.trim()
+            : `Bill ${index + 1}`,
+        date: typeof bill.date === 'string' && bill.date.trim() ? bill.date.trim() : 'Upcoming',
+        amount: toNumber(bill.amount, 0),
+        recurringDay:
+          typeof bill.recurringDay === 'number' && Number.isFinite(bill.recurringDay)
+            ? bill.recurringDay
+            : null,
+      }))
+      setBudgetBills(nextBills)
+    }
+    if (updates.spendEntries !== undefined && Array.isArray(updates.spendEntries)) {
+      const nextEntries = updates.spendEntries.map((entry) => ({
+        id:
+          typeof entry.id === 'string' && entry.id.trim()
+            ? entry.id
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        merchant: typeof entry.merchant === 'string' ? entry.merchant : 'Copilot entry',
+        category: typeof entry.category === 'string' ? entry.category : 'General',
+        amount: toNumber(entry.amount, 0),
+        date:
+          typeof entry.date === 'string' && entry.date.trim()
+            ? entry.date
+            : new Date().toISOString().slice(0, 10),
+        note: typeof entry.note === 'string' ? entry.note : '',
+      }))
+      setSpendEntries(nextEntries)
+    }
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
@@ -430,17 +527,36 @@ export default function App() {
         <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
           <NavigationContainer>
             <StatusBar style="dark" />
-            <Tab.Navigator
-              screenOptions={{
+          <Tab.Navigator
+            screenOptions={({ route }) => {
+              const iconName = (() => {
+                if (route.name === 'Budget') return 'pie-chart'
+                if (route.name === 'Cash Flow') return 'repeat'
+                if (route.name === 'Spending') return 'credit-card'
+                if (route.name === 'Insights') return 'bar-chart-2'
+                return 'more-horizontal'
+              })()
+
+              return {
                 headerShown: false,
+                tabBarActiveTintColor: theme.colors.accent,
+                tabBarInactiveTintColor: theme.colors.inkMuted,
+                tabBarIcon: ({ color, size }) => (
+                  <Feather name={iconName} color={color} size={size} />
+                ),
                 tabBarStyle: {
                   backgroundColor: '#fff',
                   borderTopColor: theme.colors.border,
                   height: 64,
                   paddingBottom: 8,
                 },
-              }}
-            >
+                tabBarLabelStyle: {
+                  fontSize: 11,
+                  fontWeight: '600',
+                },
+              }
+            }}
+          >
               <Tab.Screen name="Budget">
                 {() => (
                   <BudgetScreen
@@ -521,13 +637,15 @@ export default function App() {
               </Tab.Screen>
               <Tab.Screen name="More">
                 {() => (
-                  <MoreStackNavigator
-                    plannerProps={{ bills: budgetBills, goals: budgetGoals }}
+                <MoreStackNavigator
+                  plannerProps={{ bills: budgetBills, goals: budgetGoals }}
                     copilotProps={{
                       leftToBudget,
                       bankBalanceAfterBills,
                       spendVariance,
                       suggestedActions: aiGuidance.slice(0, 3),
+                      budgetSnapshot: currentBudgetState,
+                      onApplyUpdates: applyCopilotUpdates,
                     }}
                     preferencesProps={{
                       primaryGoal,
