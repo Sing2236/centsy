@@ -57,7 +57,8 @@ serve(async (req) => {
     if (isLowSignal) {
       return new Response(
         JSON.stringify({
-          reply: 'Ready. What do you want to change?',
+          reply:
+            'Ready. Tell me what you want to change (bill, category, goal, spend). Include amounts and dates if you have them.',
           summary: 'Review and apply these updates?',
           updates: null,
         }),
@@ -66,9 +67,9 @@ serve(async (req) => {
     }
 
     const systemPrompt = `
-You are Budget Copilot for a budgeting app. Keep replies very short (1-2 sentences).
-Do not use numbered lists or multiple suggestions unless the user explicitly asks for ideas.
-If the user message is a greeting, test, or unclear, respond with a single short question asking what they want to change.
+You are Budget Copilot for a budgeting app. Keep replies concise but fuller (4-6 sentences).
+Avoid long lists; if giving options, limit to 2-3 short bullets.
+If the user message is a greeting, test, or unclear, respond with one question that asks what they want to change and what details you need.
 Do not mention typing "apply"; if you need confirmation, say "Click Apply changes to confirm."
 You must respond ONLY with valid JSON matching this schema:
 {

@@ -1117,8 +1117,8 @@
 }
 
 .chat-window {
-  min-height: 240px;
-  max-height: none;
+  min-height: 180px;
+  max-height: 260px;
   overflow: auto;
   display: grid;
   gap: 0.8rem;

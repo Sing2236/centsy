@@ -5283,16 +5283,21 @@ function App() {
                 early access.
               </p>
               <div className="hero-download">
-                <a
-                  className="ghost"
-                  href={androidApkUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  download="centsy-mobile.apk"
-                >
-                  Download Android APK
-                </a>
-                <p className="download-note">Android-only install.</p>
+                <span className="download-thumb">
+                  <img src={centsyLogo} alt="Centsy app logo" />
+                </span>
+                <div className="download-meta">
+                  <a
+                    className="ghost"
+                    href={androidApkUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    download="centsy-mobile.apk"
+                  >
+                    Download Android APK
+                  </a>
+                  <p className="download-note">Android-only install.</p>
+                </div>
               </div>
               {waitlistMessage ? (
                 <p

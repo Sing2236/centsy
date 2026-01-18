@@ -184,6 +184,30 @@
   flex-wrap: wrap;
 }
 
+.download-thumb {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+}
+
+.download-thumb img {
+  width: 70%;
+  height: 70%;
+  object-fit: contain;
+}
+
+.download-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
 .download-note {
   margin: 0;
   font-size: 0.85rem;
