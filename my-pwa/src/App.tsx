@@ -883,6 +883,8 @@ function App() {
   const homeUrl = `${basePath}/`
   const termsPdfUrl = `${basePath}/terms.pdf`
   const privacyPdfUrl = `${basePath}/privacy.pdf`
+  const androidApkUrl =
+    'https://expo.dev/artifacts/eas/skqgCEMofiabDQX92gntBZ.apk'
 
   const builderRef = useRef<HTMLDivElement | null>(null)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
@@ -5280,6 +5282,18 @@ function App() {
                 One clear next step. Get a short email series with setup tips and
                 early access.
               </p>
+              <div className="hero-download">
+                <a
+                  className="ghost"
+                  href={androidApkUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  download="centsy-mobile.apk"
+                >
+                  Download Android APK
+                </a>
+                <p className="download-note">Android-only install.</p>
+              </div>
               {waitlistMessage ? (
                 <p
                   className={`waitlist-status ${

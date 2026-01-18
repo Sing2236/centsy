@@ -177,6 +177,19 @@
   position: relative;
 }
 
+.hero-download {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.download-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-600);
+}
+
 .waitlist-field {
   display: grid;
   grid-template-columns: 1fr auto;
