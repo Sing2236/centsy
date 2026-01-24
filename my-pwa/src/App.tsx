@@ -738,6 +738,7 @@ function App() {
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
   const [editingCategory, setEditingCategory] = useState<string | null>(null)
   const [editCategoryValues, setEditCategoryValues] = useState({
+    name: '',
     planned: '',
     actual: '',
   })
@@ -1263,12 +1264,34 @@ function App() {
     if (!category) return
     setEditingCategory(name)
     setEditCategoryValues({
+      name: category.name,
       planned: String(category.planned),
       actual: String(category.actual),
     })
   }
 
   const handleSaveCategory = (name: string) => {
+    const nextName = editCategoryValues.name.trim()
+    if (!nextName) {
+      showToast('Bill name is required.')
+      return
+    }
+    const normalizedName = name.toLowerCase()
+    const normalizedNext = nextName.toLowerCase()
+    const nameConflict = budgetCategories.some(
+      (category) =>
+        category.name.toLowerCase() === normalizedNext &&
+        category.name.toLowerCase() !== normalizedName
+    )
+    const billConflict = budgetBills.some(
+      (bill) =>
+        bill.name.toLowerCase() === normalizedNext &&
+        bill.name.toLowerCase() !== normalizedName
+    )
+    if (nameConflict || billConflict) {
+      showToast('That bill already exists.')
+      return
+    }
     const plannedValue = Number(editCategoryValues.planned || 0)
     const actualValue = Number(editCategoryValues.actual || 0)
     setBudgetCategories((prev) =>
@@ -1276,6 +1299,7 @@ function App() {
         category.name === name
           ? {
               ...category,
+              name: nextName,
               planned: plannedValue,
               actual: actualValue,
             }
@@ -1284,13 +1308,38 @@ function App() {
     )
     setBudgetBills((prev) =>
       prev.map((bill) =>
-        bill.name.toLowerCase() === name.toLowerCase()
-          ? { ...bill, amount: plannedValue }
+        bill.name.toLowerCase() === normalizedName
+          ? { ...bill, name: nextName, amount: plannedValue }
           : bill
       )
     )
+    setSpendEntries((prev) =>
+      prev.map((entry) =>
+        entry.category.toLowerCase() === normalizedName
+          ? { ...entry, category: nextName }
+          : entry
+      )
+    )
+    setNewSpend((prev) =>
+      prev.category.toLowerCase() === normalizedName
+        ? { ...prev, category: nextName }
+        : prev
+    )
+    setEditSpendValues((prev) =>
+      prev.category.toLowerCase() === normalizedName
+        ? { ...prev, category: nextName }
+        : prev
+    )
+    setPendingSpendDraft((prev) =>
+      prev && prev.category && prev.category.toLowerCase() === normalizedName
+        ? { ...prev, category: nextName }
+        : prev
+    )
+    if (savingsBill && savingsBill.toLowerCase() === normalizedName) {
+      setSavingsBill(nextName)
+    }
     setEditingCategory(null)
-    showToast(`${name} updated.`)
+    showToast(`${nextName} updated.`)
   }
 
   const handleDeleteCategory = (name: string) => {
@@ -6513,6 +6562,16 @@ function App() {
                       </div>
                       {isEditing ? (
                         <div className="edit-fields">
+                          <input
+                            type="text"
+                            value={editCategoryValues.name}
+                            onChange={(event) =>
+                              setEditCategoryValues((prev) => ({
+                                ...prev,
+                                name: event.target.value,
+                              }))
+                            }
+                          />
                           <input
                             type="number"
                             value={editCategoryValues.planned}
