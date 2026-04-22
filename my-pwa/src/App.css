@@ -6,10 +6,405 @@
   color: #0f172a;
 }
 
-.figma-landing {
+.figma-landing,
+.weebies-homepage-bg {
   min-height: 100vh;
-  background: #ffffff;
+  background: #f5f5f5;
   color: #0f172a;
+}
+
+.weebies-homepage-bg {
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.weebies-homepage-card {
+  width: min(100%, 1920px);
+  min-height: min(100vh - 4rem, 1080px);
+  background: #ffffff;
+  border-radius: 30px;
+  box-shadow: 20px 30px 100px 0 rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.weebies-homepage-nav {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 3.75rem 5rem 0;
+}
+
+.weebies-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.weebies-brand-mark {
+  width: 3.5rem;
+  height: 3.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid #414042;
+  color: #414042;
+  font-size: 1.65rem;
+  font-weight: 700;
+}
+
+.weebies-brand-text {
+  font-family: 'Poppins', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 2.8rem;
+  font-weight: 700;
+  color: #414042;
+}
+
+.weebies-nav-links {
+  display: flex;
+  justify-content: center;
+  gap: 4.25rem;
+}
+
+.weebies-nav-links button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #000;
+  font-family: 'Poppins', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 1.875rem;
+  font-weight: 500;
+}
+
+.weebies-login {
+  width: 20.5rem;
+  height: 5.7rem;
+  border: 0;
+  border-radius: 80px;
+  background: #38a755;
+  box-shadow: 0 5px 20px 0 rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font-family: 'Poppins', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 1.875rem;
+  font-weight: 700;
+}
+
+.weebies-hero {
+  display: grid;
+  grid-template-columns: 1fr 0.92fr;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 4rem 4rem 5rem;
+}
+
+.weebies-copy {
+  max-width: 64rem;
+  display: grid;
+  gap: 0;
+}
+
+.weebies-kicker {
+  margin: 0 0 0.35rem;
+  color: #686868;
+  font-family: 'Poppins', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 4.5rem;
+  font-weight: 700;
+}
+
+.weebies-copy h1 {
+  margin: 0 0 0.75rem;
+  color: #000;
+  font-family: 'Poppins', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: clamp(5rem, 8vw, 10rem);
+  line-height: 0.95;
+  font-weight: 700;
+}
+
+.weebies-subcopy {
+  margin: 0 0 4.25rem;
+  max-width: 39rem;
+  color: #686868;
+  font-family: 'Poppins', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: clamp(2rem, 3vw, 3.6rem);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.weebies-cta {
+  width: min(100%, 41.25rem);
+  height: 8.7rem;
+  border: 0;
+  border-bottom-right-radius: 100px;
+  background: #38a755;
+  box-shadow: 10px 20px 50px 0 rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font-family: 'Poppins', 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: clamp(2rem, 3vw, 4rem);
+  font-weight: 700;
+}
+
+.weebies-illustration {
+  position: relative;
+  width: 100%;
+  max-width: 46rem;
+  aspect-ratio: 743 / 575;
+  justify-self: center;
+}
+
+.weebies-resume {
+  position: absolute;
+  right: 2.2rem;
+  bottom: 2.1rem;
+  width: 31.5rem;
+  height: 38rem;
+  background: #ededed;
+  border: 3px solid #394247;
+  overflow: hidden;
+}
+
+.weebies-resume-dark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4.6rem;
+  height: 100%;
+  background: #414042;
+}
+
+.weebies-resume-top {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 0.7rem;
+  background: #2f3940;
+}
+
+.weebies-resume-lines {
+  position: absolute;
+  left: 11rem;
+  height: 1rem;
+  background: #414042;
+}
+
+.weebies-resume-lines.short {
+  top: 5.2rem;
+  width: 8.8rem;
+}
+
+.weebies-resume-lines.short.second {
+  top: 7.3rem;
+  width: 6rem;
+}
+
+.weebies-resume-lines.short.third {
+  top: 9.4rem;
+  width: 6rem;
+}
+
+.weebies-resume-lines.full {
+  top: 14.8rem;
+  left: 6rem;
+  width: 21rem;
+  height: 0.8rem;
+}
+
+.weebies-resume-dots {
+  position: absolute;
+  left: 10.3rem;
+  top: 24rem;
+  display: flex;
+  gap: 0.8rem;
+}
+
+.weebies-resume-dots span {
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  background: #2f3940;
+}
+
+.weebies-resume-columns {
+  position: absolute;
+  left: 11rem;
+  top: 18.2rem;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+  width: 15rem;
+}
+
+.weebies-resume-columns div {
+  height: 8rem;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      #2f3940 0,
+      #2f3940 0.5rem,
+      transparent 0.5rem,
+      transparent 1.15rem
+    );
+}
+
+.weebies-resume-footer {
+  position: absolute;
+  left: 7rem;
+  bottom: 3.5rem;
+  display: flex;
+  align-items: end;
+  gap: 1.4rem;
+}
+
+.weebies-resume-footer span {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 0.7rem solid #414042;
+  display: inline-block;
+}
+
+.weebies-resume-footer div {
+  width: 6.5rem;
+  height: 5.5rem;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      #2f3940 0,
+      #2f3940 0.45rem,
+      transparent 0.45rem,
+      transparent 1.1rem
+    );
+}
+
+.weebies-person {
+  position: absolute;
+  left: 8rem;
+  bottom: 1.5rem;
+  width: 15rem;
+  height: 30rem;
+}
+
+.weebies-head {
+  position: absolute;
+  top: 0;
+  left: 3rem;
+  width: 9rem;
+  height: 9rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 3px solid #2f3940;
+}
+
+.weebies-head::before {
+  content: '';
+  position: absolute;
+  left: 2.2rem;
+  top: 1.4rem;
+  width: 3.8rem;
+  height: 4.8rem;
+  border-radius: 2rem 2rem 2.2rem 2.2rem;
+  background: #2f3940;
+}
+
+.weebies-body {
+  position: absolute;
+  top: 6.5rem;
+  left: 1.6rem;
+  width: 10.5rem;
+  height: 12rem;
+  border-radius: 2.2rem 2.2rem 1.4rem 1.4rem;
+  background: #38a755;
+}
+
+.weebies-arm,
+.weebies-leg {
+  position: absolute;
+  background: #2f3940;
+  border-radius: 999px;
+}
+
+.weebies-arm.right {
+  top: 7rem;
+  right: 1rem;
+  width: 3rem;
+  height: 9rem;
+  transform: rotate(-18deg);
+}
+
+.weebies-arm.left {
+  top: 9rem;
+  left: 0.8rem;
+  width: 2.4rem;
+  height: 7rem;
+  transform: rotate(32deg);
+}
+
+.weebies-leg.left {
+  bottom: 0;
+  left: 4rem;
+  width: 2.8rem;
+  height: 14rem;
+  transform: rotate(4deg);
+}
+
+.weebies-leg.right {
+  bottom: 0;
+  left: 7rem;
+  width: 2.8rem;
+  height: 14rem;
+  transform: rotate(-6deg);
+}
+
+.weebies-leaf-group {
+  position: absolute;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.weebies-leaf-group span {
+  display: block;
+  width: 3rem;
+  height: 1.5rem;
+  border-radius: 999px 999px 999px 0;
+  background: #4a6557;
+  transform: rotate(-24deg);
+}
+
+.weebies-leaf-group.left {
+  left: 0;
+  bottom: 4rem;
+}
+
+.weebies-leaf-group.left span:nth-child(odd) {
+  margin-left: 2rem;
+  transform: rotate(24deg);
+}
+
+.weebies-leaf-group.right {
+  right: 1rem;
+  bottom: 2rem;
+}
+
+.weebies-leaf-group.right span {
+  width: 4rem;
+  height: 7rem;
+  border-radius: 100% 0 100% 0;
+  transform: none;
+}
+
+.weebies-shadow {
+  position: absolute;
+  left: 10%;
+  right: 8%;
+  bottom: 0.5rem;
+  height: 1.3rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .figma-landing-header,
@@ -741,6 +1136,27 @@
   .figma-panel-wide {
     grid-column: auto;
   }
+
+  .weebies-homepage-card {
+    min-height: auto;
+  }
+
+  .weebies-homepage-nav,
+  .weebies-hero {
+    grid-template-columns: 1fr;
+    padding: 1.5rem;
+  }
+
+  .weebies-nav-links {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+  }
+
+  .weebies-login,
+  .weebies-cta {
+    width: 100%;
+  }
 }
 
 @media (max-width: 760px) {
@@ -781,5 +1197,63 @@
 
   .figma-list-meta {
     text-align: left;
+  }
+
+  .weebies-homepage-bg {
+    padding: 0;
+  }
+
+  .weebies-homepage-card {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .weebies-brand-text {
+    font-size: 2rem;
+  }
+
+  .weebies-nav-links button,
+  .weebies-login {
+    font-size: 1.2rem;
+  }
+
+  .weebies-kicker {
+    font-size: 2.25rem;
+  }
+
+  .weebies-copy h1 {
+    font-size: 4.25rem;
+  }
+
+  .weebies-subcopy {
+    font-size: 1.65rem;
+    margin-bottom: 2rem;
+  }
+
+  .weebies-illustration {
+    max-width: 100%;
+  }
+
+  .weebies-resume {
+    width: 20rem;
+    height: 24rem;
+    right: 0.5rem;
+  }
+
+  .weebies-person {
+    left: 3rem;
+    width: 10rem;
+    height: 20rem;
+  }
+
+  .weebies-head {
+    width: 6rem;
+    height: 6rem;
+  }
+
+  .weebies-body {
+    top: 4.5rem;
+    width: 7rem;
+    height: 8.5rem;
   }
 }

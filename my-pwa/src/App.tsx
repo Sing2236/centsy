@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
+import { AboutPage } from './components/figma/AboutPage'
+import { ChangelogPage } from './components/figma/ChangelogPage'
 import { LandingPage } from './components/figma/LandingPage'
 import { ShellHeader } from './components/figma/ShellHeader'
 import { SidebarNav, type ModuleId } from './components/figma/SidebarNav'
@@ -103,6 +105,33 @@ const createSpendId = () => {
   return `spend-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+const moduleToPath: Record<ModuleId, string> = {
+  home: '/home',
+  plan: '/plan',
+  activity: '/activity',
+  insights: '/insights',
+  'ask-ai': '/ask-ai',
+}
+
+const pathToModule = (path: string): ModuleId | null => {
+  switch (path) {
+    case '/home':
+      return 'home'
+    case '/plan':
+      return 'plan'
+    case '/activity':
+      return 'activity'
+    case '/insights':
+      return 'insights'
+    case '/ask-ai':
+      return 'ask-ai'
+    default:
+      return null
+  }
+}
+
+const isPublicPath = (path: string) => ['/', '/login', '/about', '/changelog'].includes(path)
+
 export default function App() {
   const [activeModule, setActiveModule] = useState<ModuleId>('home')
   const [authLoading, setAuthLoading] = useState(false)
@@ -146,16 +175,42 @@ export default function App() {
   const [partnerIncome, setPartnerIncome] = useState(0)
   const [payFrequency, setPayFrequency] = useState('biweekly')
   const [primaryGoal, setPrimaryGoal] = useState('stability')
+  const [routePath, setRoutePath] = useState(() =>
+    typeof window !== 'undefined' ? window.location.pathname || '/' : '/',
+  )
   const [searchValue, setSearchValue] = useState('')
-  const [showAuth, setShowAuth] = useState(false)
-  const [showLanding, setShowLanding] = useState(true)
-  const [showSettings, setShowSettings] = useState(false)
   const [spendEntries, setSpendEntries] = useState<SpendEntryShape[]>([])
   const [toast, setToast] = useState('')
   const toastTimer = useRef<number | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
+
+  const navigate = (path: string, options?: { replace?: boolean }) => {
+    if (typeof window !== 'undefined') {
+      if (options?.replace) {
+        window.history.replaceState({}, '', path)
+      } else {
+        window.history.pushState({}, '', path)
+      }
+    }
+    setRoutePath(path)
+  }
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setRoutePath(window.location.pathname || '/')
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [routePath])
+
+  useEffect(() => {
+    const routeModule = pathToModule(routePath)
+    if (routeModule && routeModule !== activeModule) {
+      setActiveModule(routeModule)
+    }
+  }, [routePath, activeModule])
 
   useEffect(() => {
     const loadSession = async () => {
@@ -170,14 +225,16 @@ export default function App() {
       setUserEmail(session?.user?.email ?? null)
       setUserId(session?.user?.id ?? null)
       if (session?.user?.email) {
-        setShowLanding(false)
+        if (routePath === '/' || routePath === '/login') {
+          navigate('/home', { replace: true })
+        }
       }
     })
 
     return () => {
       listener.subscription.unsubscribe()
     }
-  }, [])
+  }, [routePath])
 
   useEffect(() => {
     const loadBudgetState = async () => {
@@ -293,7 +350,7 @@ export default function App() {
   const requireLogin = (message: string) => {
     if (userEmail) return true
     showToast(message)
-    setShowAuth(true)
+    navigate('/login')
     return false
   }
 
@@ -317,7 +374,7 @@ export default function App() {
         if (error) throw error
         showToast('Logged in.')
       }
-      setShowAuth(false)
+      navigate('/home', { replace: true })
       setLoginPassword('')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Authentication failed.'
@@ -347,7 +404,7 @@ export default function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    setShowLanding(true)
+    navigate('/', { replace: true })
     showToast('Logged out.')
   }
 
@@ -713,15 +770,77 @@ export default function App() {
     weeklyAmounts,
   }
 
-  if (!userEmail && showLanding) {
+  const showLanding = isPublicPath(routePath)
+  const showAuth = routePath === '/login'
+  const showSettings = routePath === '/settings'
+
+  if (showLanding) {
+    if (routePath === '/about') {
+      return (
+        <>
+          <AboutPage
+            onNavigateChangelog={() => navigate('/changelog')}
+            onNavigateHome={() => navigate('/')}
+            onOpenAuth={() => navigate('/login')}
+          />
+          {showAuth ? (
+            <SignInModal
+              authLoading={authLoading}
+              authMode={authMode}
+              email={loginEmail}
+              error={authError}
+              onClose={() => navigate('/', { replace: true })}
+              onForgotPassword={handlePasswordReset}
+              onSubmit={handleAuthSubmit}
+              password={loginPassword}
+              setAuthMode={setAuthMode}
+              setEmail={setLoginEmail}
+              setPassword={setLoginPassword}
+            />
+          ) : null}
+          {toast ? <div className="figma-toast">{toast}</div> : null}
+        </>
+      )
+    }
+
+    if (routePath === '/changelog') {
+      return (
+        <>
+          <ChangelogPage
+            onNavigateAbout={() => navigate('/about')}
+            onNavigateHome={() => navigate('/')}
+            onOpenAuth={() => navigate('/login')}
+          />
+          {showAuth ? (
+            <SignInModal
+              authLoading={authLoading}
+              authMode={authMode}
+              email={loginEmail}
+              error={authError}
+              onClose={() => navigate('/', { replace: true })}
+              onForgotPassword={handlePasswordReset}
+              onSubmit={handleAuthSubmit}
+              password={loginPassword}
+              setAuthMode={setAuthMode}
+              setEmail={setLoginEmail}
+              setPassword={setLoginPassword}
+            />
+          ) : null}
+          {toast ? <div className="figma-toast">{toast}</div> : null}
+        </>
+      )
+    }
+
     return (
       <>
         <LandingPage
           onEnterApp={(module) => {
             setActiveModule(module)
-            setShowLanding(false)
+            navigate(moduleToPath[module])
           }}
-          onOpenAuth={() => setShowAuth(true)}
+          onNavigateAbout={() => navigate('/about')}
+          onNavigateChangelog={() => navigate('/changelog')}
+          onOpenAuth={() => navigate('/login')}
         />
         {showAuth ? (
           <SignInModal
@@ -729,7 +848,7 @@ export default function App() {
             authMode={authMode}
             email={loginEmail}
             error={authError}
-            onClose={() => setShowAuth(false)}
+            onClose={() => navigate('/', { replace: true })}
             onForgotPassword={handlePasswordReset}
             onSubmit={handleAuthSubmit}
             password={loginPassword}
@@ -745,13 +864,16 @@ export default function App() {
 
   return (
     <div className="figma-app">
-      <SidebarNav activeModule={activeModule} setActiveModule={setActiveModule} />
+      <SidebarNav
+        activeModule={activeModule}
+        setActiveModule={(module) => navigate(moduleToPath[module])}
+      />
 
       <div className="figma-main">
         <ShellHeader
           activeModule={activeModule}
-          onOpenAuth={() => setShowAuth(true)}
-          onOpenSettings={() => setShowSettings(true)}
+          onOpenAuth={() => navigate('/login')}
+          onOpenSettings={() => navigate('/settings')}
           onLogout={handleLogout}
           searchValue={searchValue}
           setSearchValue={setSearchValue}
@@ -764,7 +886,7 @@ export default function App() {
               aiSummary={aiSummary}
               biggestCategories={biggestCategories}
               nextActions={nextActions}
-              onJump={setActiveModule}
+              onJump={(module) => navigate(moduleToPath[module])}
               recentAlerts={homeAlerts}
               stats={dashboardStats}
               upcomingBills={upcomingBills}
@@ -900,7 +1022,7 @@ export default function App() {
           authMode={authMode}
           email={loginEmail}
           error={authError}
-          onClose={() => setShowAuth(false)}
+          onClose={() => navigate(moduleToPath[activeModule], { replace: true })}
           onForgotPassword={handlePasswordReset}
           onSubmit={handleAuthSubmit}
           password={loginPassword}
@@ -911,14 +1033,14 @@ export default function App() {
       ) : null}
 
       {showSettings ? (
-        <div className="figma-modal-backdrop" role="presentation" onClick={() => setShowSettings(false)}>
+        <div className="figma-modal-backdrop" role="presentation" onClick={() => navigate(moduleToPath[activeModule], { replace: true })}>
           <div className="figma-settings-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <div className="figma-modal-head">
               <div>
                 <span className="figma-pill">Settings</span>
                 <h3>Preferences</h3>
               </div>
-              <button className="figma-icon-button" type="button" onClick={() => setShowSettings(false)}>
+              <button className="figma-icon-button" type="button" onClick={() => navigate(moduleToPath[activeModule], { replace: true })}>
                 ×
               </button>
             </div>

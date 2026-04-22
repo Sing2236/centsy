@@ -1,0 +1,557 @@
+.centsy-landing {
+  min-height: 100vh;
+  color: #132238;
+  background:
+    radial-gradient(circle at top left, rgba(248, 205, 160, 0.9), transparent 28%),
+    radial-gradient(circle at 82% 18%, rgba(157, 227, 214, 0.9), transparent 24%),
+    radial-gradient(circle at 72% 78%, rgba(141, 182, 255, 0.65), transparent 26%),
+    linear-gradient(180deg, #fffaf2 0%, #f7fbfd 46%, #eef5ff 100%);
+}
+
+.centsy-landing-shell {
+  width: min(1320px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 24px 0 40px;
+}
+
+.centsy-landing-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 24px;
+  border: 1px solid rgba(19, 34, 56, 0.08);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 20px 60px rgba(19, 34, 56, 0.08);
+}
+
+.centsy-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.centsy-brand-mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #132238, #2d567d);
+  color: #fffdf9;
+  font-size: 1.5rem;
+  font-weight: 700;
+  box-shadow: 0 14px 30px rgba(19, 34, 56, 0.18);
+}
+
+.centsy-brand-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.centsy-brand-copy strong {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #132238;
+}
+
+.centsy-brand-copy small {
+  color: #5a6f85;
+  font-size: 0.86rem;
+}
+
+.centsy-landing-nav {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.centsy-landing-nav button,
+.centsy-button {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.centsy-landing-nav button {
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #35516f;
+  font-size: 0.96rem;
+  font-weight: 600;
+}
+
+.centsy-landing-nav button:hover,
+.centsy-button:hover {
+  transform: translateY(-1px);
+}
+
+.centsy-landing-actions,
+.centsy-hero-actions,
+.centsy-bottom-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.centsy-button {
+  padding: 14px 20px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.centsy-button-solid {
+  background: linear-gradient(135deg, #132238, #23456a);
+  color: #fffdf9;
+  box-shadow: 0 16px 34px rgba(19, 34, 56, 0.2);
+}
+
+.centsy-button-ghost {
+  background: rgba(255, 255, 255, 0.65);
+  color: #23456a;
+  border-color: rgba(35, 69, 106, 0.12);
+}
+
+.centsy-landing-main {
+  display: grid;
+  gap: 22px;
+  margin-top: 22px;
+}
+
+.centsy-hero,
+.centsy-story-band,
+.centsy-bottom-cta {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(19, 34, 56, 0.08);
+  border-radius: 34px;
+  background: rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 24px 70px rgba(19, 34, 56, 0.08);
+}
+
+.centsy-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(420px, 0.98fr);
+  gap: 24px;
+  padding: 44px;
+}
+
+.centsy-hero-copy {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+}
+
+.centsy-eyebrow {
+  width: fit-content;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(248, 205, 160, 0.34);
+  color: #7b5631;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.centsy-eyebrow.muted {
+  background: rgba(157, 227, 214, 0.36);
+  color: #235c59;
+}
+
+.centsy-hero-copy h1,
+.centsy-story-copy h2,
+.centsy-bottom-cta h2 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #102037;
+  letter-spacing: -0.04em;
+}
+
+.centsy-hero-copy h1 {
+  max-width: 11ch;
+  font-size: clamp(3.2rem, 6vw, 6.2rem);
+  line-height: 0.92;
+}
+
+.centsy-hero-lead,
+.centsy-story-copy p,
+.centsy-highlight-card p,
+.centsy-feature-card p,
+.centsy-step-card p {
+  margin: 0;
+  color: #52667c;
+  font-size: 1.02rem;
+  line-height: 1.7;
+}
+
+.centsy-hero-lead {
+  max-width: 58ch;
+  font-size: 1.08rem;
+}
+
+.centsy-trust-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.centsy-trust-row span {
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(19, 34, 56, 0.08);
+  color: #35516f;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.centsy-highlight-grid,
+.centsy-feature-grid,
+.centsy-step-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.centsy-highlight-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.centsy-highlight-card,
+.centsy-feature-card,
+.centsy-step-card {
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(19, 34, 56, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.centsy-highlight-card strong,
+.centsy-step-card strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #132238;
+  font-size: 1rem;
+}
+
+.centsy-hero-visual {
+  position: relative;
+  min-height: 620px;
+  border-radius: 30px;
+  background:
+    linear-gradient(145deg, rgba(19, 34, 56, 0.96), rgba(39, 70, 109, 0.94)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.centsy-glow {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(18px);
+}
+
+.centsy-glow-top {
+  top: 34px;
+  left: 34px;
+  width: 180px;
+  height: 180px;
+  background: rgba(248, 205, 160, 0.34);
+}
+
+.centsy-glow-bottom {
+  right: 30px;
+  bottom: 48px;
+  width: 210px;
+  height: 210px;
+  background: rgba(157, 227, 214, 0.26);
+}
+
+.centsy-dashboard-card {
+  position: absolute;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.16);
+}
+
+.centsy-dashboard-primary {
+  top: 42px;
+  left: 40px;
+  right: 108px;
+  padding: 24px;
+}
+
+.centsy-card-topline,
+.centsy-split-row,
+.centsy-goal-stack div,
+.centsy-week-bars div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.centsy-card-topline span,
+.centsy-mini-label,
+.centsy-dashboard-note p,
+.centsy-week-bars span,
+.centsy-goal-stack span,
+.centsy-split-row small {
+  color: rgba(238, 247, 255, 0.8);
+}
+
+.centsy-card-topline strong,
+.centsy-split-row strong,
+.centsy-goal-stack b {
+  color: #ffffff;
+}
+
+.centsy-card-topline strong {
+  font-size: 2rem;
+}
+
+.centsy-meter {
+  height: 12px;
+  margin: 18px 0 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.centsy-meter span,
+.centsy-week-bars i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f8cda0, #9ee3d6 52%, #8db6ff);
+}
+
+.centsy-dashboard-secondary {
+  top: 214px;
+  right: 36px;
+  width: 264px;
+  padding: 20px;
+}
+
+.centsy-mini-label {
+  display: inline-block;
+  margin-bottom: 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.centsy-week-bars {
+  display: grid;
+  gap: 12px;
+}
+
+.centsy-week-bars div {
+  gap: 14px;
+}
+
+.centsy-week-bars span {
+  min-width: 52px;
+  font-size: 0.84rem;
+}
+
+.centsy-week-bars i {
+  flex: 1;
+  min-width: 0;
+  height: 10px;
+  opacity: 0.95;
+}
+
+.centsy-dashboard-note {
+  left: 36px;
+  bottom: 48px;
+  width: 290px;
+  padding: 20px;
+}
+
+.centsy-dashboard-note p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.centsy-dashboard-goals {
+  right: 52px;
+  bottom: 66px;
+  width: 228px;
+  padding: 20px;
+}
+
+.centsy-goal-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.centsy-goal-stack div {
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.centsy-goal-stack div:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.centsy-story-band,
+.centsy-bottom-cta {
+  display: grid;
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  gap: 18px;
+  padding: 30px;
+}
+
+.centsy-story-copy,
+.centsy-bottom-cta > div:first-child {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.centsy-story-copy h2,
+.centsy-bottom-cta h2 {
+  font-size: clamp(2rem, 3vw, 3rem);
+  line-height: 1.02;
+}
+
+.centsy-step-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-self: stretch;
+}
+
+.centsy-step-card span,
+.centsy-feature-card span {
+  display: inline-block;
+  margin-bottom: 10px;
+  color: #7b5631;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.centsy-feature-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.centsy-feature-card {
+  min-height: 220px;
+}
+
+.centsy-feature-card h3 {
+  margin: 0 0 10px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.6rem;
+  line-height: 1.02;
+  color: #132238;
+}
+
+.centsy-bottom-cta {
+  align-items: center;
+}
+
+@media (max-width: 1180px) {
+  .centsy-landing-header,
+  .centsy-hero,
+  .centsy-story-band,
+  .centsy-bottom-cta {
+    grid-template-columns: 1fr;
+  }
+
+  .centsy-landing-nav {
+    justify-content: flex-start;
+  }
+
+  .centsy-highlight-grid,
+  .centsy-feature-grid,
+  .centsy-step-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .centsy-hero-visual {
+    min-height: 560px;
+  }
+}
+
+@media (max-width: 760px) {
+  .centsy-landing-shell {
+    width: min(100%, calc(100% - 24px));
+    padding: 12px 0 20px;
+  }
+
+  .centsy-landing-header,
+  .centsy-hero,
+  .centsy-story-band,
+  .centsy-bottom-cta {
+    padding: 20px;
+    border-radius: 24px;
+  }
+
+  .centsy-landing-actions,
+  .centsy-bottom-actions,
+  .centsy-hero-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .centsy-button {
+    width: 100%;
+  }
+
+  .centsy-hero-copy h1 {
+    max-width: 12ch;
+    font-size: clamp(2.6rem, 12vw, 4rem);
+  }
+
+  .centsy-hero-visual {
+    min-height: 520px;
+  }
+
+  .centsy-dashboard-primary {
+    left: 18px;
+    right: 18px;
+    top: 18px;
+  }
+
+  .centsy-dashboard-secondary {
+    left: 18px;
+    right: 18px;
+    top: 188px;
+    width: auto;
+  }
+
+  .centsy-dashboard-note {
+    left: 18px;
+    right: 18px;
+    bottom: 132px;
+    width: auto;
+  }
+
+  .centsy-dashboard-goals {
+    left: 18px;
+    right: 18px;
+    bottom: 18px;
+    width: auto;
+  }
+}
