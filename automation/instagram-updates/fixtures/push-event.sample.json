@@ -1,0 +1,42 @@
+{
+  "ref": "refs/heads/main",
+  "after": "9f1d6e4b5c0a1234567890abcdef1234567890ab",
+  "compare": "https://github.com/example/centsy/compare/oldsha...9f1d6e4b5c0a1234567890abcdef1234567890ab",
+  "repository": {
+    "name": "centsy",
+    "full_name": "example/centsy"
+  },
+  "pusher": {
+    "name": "ethan"
+  },
+  "head_commit": {
+    "message": "Launch the new budget insights flow"
+  },
+  "commits": [
+    {
+      "message": "Launch the new budget insights flow",
+      "author": {
+        "name": "Ethan"
+      },
+      "added": [
+        "my-pwa/src/views/InsightsView.tsx"
+      ],
+      "modified": [
+        "my-pwa/src/App.tsx",
+        "my-pwa/src/App.css"
+      ],
+      "removed": []
+    },
+    {
+      "message": "Tighten deploy workflow logging",
+      "author": {
+        "name": "Ethan"
+      },
+      "added": [],
+      "modified": [
+        ".github/workflows/deploy.yml"
+      ],
+      "removed": []
+    }
+  ]
+}

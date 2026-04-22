@@ -5,6 +5,23 @@ import { VitePWA } from 'vite-plugin-pwa'
 // https://vite.dev/config/
 export default defineConfig({
   base: '/',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/react')) {
+            return 'react-vendor'
+          }
+          if (id.includes('@supabase/supabase-js')) {
+            return 'supabase-vendor'
+          }
+          if (id.includes('node_modules')) {
+            return 'vendor'
+          }
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({
