@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1080" height="1920" viewBox="0 0 1080 1920" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="120" y1="0" x2="980" y2="1840" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8ED" />
+      <stop offset="0.45" stop-color="#F4FBFD" />
+      <stop offset="1" stop-color="#EEF4FF" />
+    </linearGradient>
+    <linearGradient id="cardGradient" x1="80" y1="180" x2="980" y2="1740" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#132238" />
+      <stop offset="1" stop-color="#264769" />
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#F8CDA0" />
+      <stop offset="0.52" stop-color="#9EE3D6" />
+      <stop offset="1" stop-color="#8DB6FF" />
+    </linearGradient>
+    <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="30" flood-color="#132238" flood-opacity="0.14"/>
+    </filter>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="34" />
+    </filter>
+    <style>
+      .sans { font-family: "Segoe UI", Arial, sans-serif; }
+      .serif { font-family: Georgia, "Times New Roman", serif; }
+      .eyebrow { fill: #6A7F94; font-size: 28px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+      .title { fill: #112036; font-size: 94px; font-weight: 700; letter-spacing: -0.05em; }
+      .subtitle { fill: #5A6D82; font-size: 34px; font-weight: 500; }
+      .card-title { fill: #E8F1FF; font-size: 28px; font-weight: 700; }
+      .card-copy { fill: rgba(232,241,255,0.82); font-size: 24px; font-weight: 500; }
+      .stat-label { fill: rgba(232,241,255,0.78); font-size: 24px; font-weight: 600; }
+      .stat-value { fill: #FFFFFF; font-size: 62px; font-weight: 700; letter-spacing: -0.04em; }
+      .small-value { fill: #FFFFFF; font-size: 34px; font-weight: 700; }
+      .small-label { fill: rgba(232,241,255,0.78); font-size: 22px; font-weight: 600; }
+      .chip { fill: rgba(255,255,255,0.12); stroke: rgba(255,255,255,0.14); stroke-width: 1.5; }
+      .line { stroke: rgba(255,255,255,0.12); stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect width="1080" height="1920" fill="url(#bgGradient)" />
+  <circle cx="180" cy="160" r="120" fill="#F8CDA0" fill-opacity="0.38" filter="url(#softGlow)" />
+  <circle cx="905" cy="260" r="130" fill="#9EE3D6" fill-opacity="0.34" filter="url(#softGlow)" />
+  <circle cx="840" cy="1660" r="140" fill="#8DB6FF" fill-opacity="0.28" filter="url(#softGlow)" />
+
+  <text x="86" y="122" class="sans eyebrow">Centsy demo stats</text>
+  <text x="80" y="232" class="serif title">A cleaner monthly view.</text>
+  <text x="84" y="298" class="sans subtitle">These are product-native numbers, not illustrated guesses.</text>
+
+  
+    <rect x="56" y="356" width="968" height="1410" rx="34" fill="url(#cardGradient)" filter="url(#cardShadow)" />
+    <text x="92" y="438" class="sans card-title">This month</text>
+    <text x="92" y="560" class="sans stat-label">Left to budget</text>
+    <text x="92" y="662" class="sans stat-value">$1,470</text>
+    <text x="92" y="722" class="sans card-copy">Monthly income $4,200 minus planned spending and buffer.</text>
+
+    <rect x="92" y="774" width="896" height="22" rx="11" fill="rgba(255,255,255,0.12)" />
+    <rect x="92" y="774" width="550" height="22" rx="11" fill="url(#accentGradient)" />
+
+    
+  <g>
+    <rect x="92" y="858" width="284" height="178" rx="28" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+    <text x="120" y="920" class="sans small-label">Monthly income</text>
+    <text x="120" y="982" class="sans small-value">$4,200</text>
+  </g>
+
+    
+  <g>
+    <rect x="398" y="858" width="284" height="178" rx="28" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+    <text x="426" y="920" class="sans small-label">Planned spend</text>
+    <text x="426" y="982" class="sans small-value">$2,580</text>
+  </g>
+
+    
+  <g>
+    <rect x="704" y="858" width="284" height="178" rx="28" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+    <text x="732" y="920" class="sans small-label">Logged spend</text>
+    <text x="732" y="982" class="sans small-value">$2,481</text>
+  </g>
+
+
+    <rect x="92" y="1080" width="896" height="262" rx="30" class="chip"/>
+    <text x="128" y="1148" class="sans card-title">Signal check</text>
+    <text x="128" y="1218" class="sans card-copy">Spend is $99 under plan.</text>
+    <text x="128" y="1270" class="sans card-copy">Next paycheck after planned bills: $810.</text>
+    <text x="128" y="1322" class="sans card-copy">Current setup is driven by the same demo budget data used in the app shell.</text>
+
+    <rect x="92" y="1390" width="896" height="280" rx="30" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" />
+    <text x="128" y="1458" class="sans card-title">Budget shape</text>
+    <text x="128" y="1520" class="sans small-label">Planned spending uses 61.4% of monthly income.</text>
+    <text x="128" y="1578" class="sans small-label">Buffer reserved: $150</text>
+    <text x="128" y="1636" class="sans small-label">Credit card balance in this demo state: $0</text>
+  
+</svg>

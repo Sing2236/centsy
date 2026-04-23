@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1080" height="1920" viewBox="0 0 1080 1920" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="120" y1="0" x2="980" y2="1840" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8ED" />
+      <stop offset="0.45" stop-color="#F4FBFD" />
+      <stop offset="1" stop-color="#EEF4FF" />
+    </linearGradient>
+    <linearGradient id="cardGradient" x1="80" y1="180" x2="980" y2="1740" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#132238" />
+      <stop offset="1" stop-color="#264769" />
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#F8CDA0" />
+      <stop offset="0.52" stop-color="#9EE3D6" />
+      <stop offset="1" stop-color="#8DB6FF" />
+    </linearGradient>
+    <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="30" flood-color="#132238" flood-opacity="0.14"/>
+    </filter>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="34" />
+    </filter>
+    <style>
+      .sans { font-family: "Segoe UI", Arial, sans-serif; }
+      .serif { font-family: Georgia, "Times New Roman", serif; }
+      .eyebrow { fill: #6A7F94; font-size: 28px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+      .title { fill: #112036; font-size: 94px; font-weight: 700; letter-spacing: -0.05em; }
+      .subtitle { fill: #5A6D82; font-size: 34px; font-weight: 500; }
+      .card-title { fill: #E8F1FF; font-size: 28px; font-weight: 700; }
+      .card-copy { fill: rgba(232,241,255,0.82); font-size: 24px; font-weight: 500; }
+      .stat-label { fill: rgba(232,241,255,0.78); font-size: 24px; font-weight: 600; }
+      .stat-value { fill: #FFFFFF; font-size: 62px; font-weight: 700; letter-spacing: -0.04em; }
+      .small-value { fill: #FFFFFF; font-size: 34px; font-weight: 700; }
+      .small-label { fill: rgba(232,241,255,0.78); font-size: 22px; font-weight: 600; }
+      .chip { fill: rgba(255,255,255,0.12); stroke: rgba(255,255,255,0.14); stroke-width: 1.5; }
+      .line { stroke: rgba(255,255,255,0.12); stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect width="1080" height="1920" fill="url(#bgGradient)" />
+  <circle cx="180" cy="160" r="120" fill="#F8CDA0" fill-opacity="0.38" filter="url(#softGlow)" />
+  <circle cx="905" cy="260" r="130" fill="#9EE3D6" fill-opacity="0.34" filter="url(#softGlow)" />
+  <circle cx="840" cy="1660" r="140" fill="#8DB6FF" fill-opacity="0.28" filter="url(#softGlow)" />
+
+  <text x="86" y="122" class="sans eyebrow">Centsy demo stats</text>
+  <text x="80" y="232" class="serif title">Stats that point somewhere.</text>
+  <text x="84" y="298" class="sans subtitle">A vertical render can still feel like product, not posterized filler.</text>
+
+  
+    <rect x="56" y="356" width="968" height="1410" rx="34" fill="url(#cardGradient)" filter="url(#cardShadow)" />
+    <text x="92" y="438" class="sans card-title">Spending mix</text>
+    <text x="92" y="520" class="sans stat-label">Logged spend</text>
+    <text x="92" y="614" class="sans stat-value">$2,481</text>
+    <text x="92" y="676" class="sans card-copy">Across 6 tracked categories in the current demo budget.</text>
+
+    
+        <rect x="92" y="454" width="376" height="244" rx="28" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+        <text x="120" y="518" class="sans card-title">Rent</text>
+        <text x="120" y="572" class="sans small-label">Planned $1,200</text>
+        <text x="120" y="618" class="sans small-value">$1,200</text>
+        <rect x="120" y="642" width="318" height="14" rx="7" fill="rgba(255,255,255,0.12)" />
+        <rect x="120" y="642" width="318" height="14" rx="7" fill="url(#accentGradient)" />
+      
+        <rect x="520" y="454" width="376" height="244" rx="28" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+        <text x="548" y="518" class="sans card-title">Savings</text>
+        <text x="548" y="572" class="sans small-label">Planned $400</text>
+        <text x="548" y="618" class="sans small-value">$400</text>
+        <rect x="548" y="642" width="318" height="14" rx="7" fill="rgba(255,255,255,0.12)" />
+        <rect x="548" y="642" width="318" height="14" rx="7" fill="url(#accentGradient)" />
+      
+        <rect x="92" y="766" width="376" height="244" rx="28" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+        <text x="120" y="830" class="sans card-title">Groceries</text>
+        <text x="120" y="884" class="sans small-label">Planned $420</text>
+        <text x="120" y="930" class="sans small-value">$368</text>
+        <rect x="120" y="954" width="318" height="14" rx="7" fill="rgba(255,255,255,0.12)" />
+        <rect x="120" y="954" width="279" height="14" rx="7" fill="url(#accentGradient)" />
+      
+        <rect x="520" y="766" width="376" height="244" rx="28" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+        <text x="548" y="830" class="sans card-title">Transportation</text>
+        <text x="548" y="884" class="sans small-label">Planned $220</text>
+        <text x="548" y="930" class="sans small-value">$245</text>
+        <rect x="548" y="954" width="318" height="14" rx="7" fill="rgba(255,255,255,0.12)" />
+        <rect x="548" y="954" width="354" height="14" rx="7" fill="url(#accentGradient)" />
+      
+
+    <rect x="92" y="1128" width="896" height="480" rx="30" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" />
+    <text x="128" y="1198" class="sans card-title">Read it faster</text>
+    <text x="128" y="1270" class="sans card-copy">Rent is still the dominant cost center. Groceries are under plan. Transportation is the only category in this demo state running above target.</text>
+    <text x="128" y="1364" class="sans card-copy">The point is not more charts. It is knowing which category deserves attention first.</text>
+  
+</svg>
